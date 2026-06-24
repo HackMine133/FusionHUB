@@ -1,0 +1,450 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local Teams = game:GetService("Teams")
+
+local player = Players.LocalPlayer
+
+-- Ожидание загрузки основного интерфейса FusionHub
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+-- ==========================================
+-- 1. НАСТРОЙКИ AIMBOT И СОСТОЯНИЯ
+-- ==========================================
+local aimSettings = {
+	Enabled = false,
+	AimPart = "Head",
+	Smoothness = 0.5,
+	TeamCheck = false,
+	TargetTeam = "All",
+	ShowFOV = false,
+	FOVRadius = 150,
+	WallCheck = true -- Добавлено на основе image_e9b665.png
+}
+
+local aimConnection = nil
+
+-- ==========================================
+-- 2. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
+-- ==========================================
+local aimRow = Instance.new("Frame")
+aimRow.Name = "AimRow"
+aimRow.Size = UDim2.new(1, -15, 0, 45)
+aimRow.BackgroundTransparency = 1
+aimRow.LayoutOrder = 6
+aimRow.Parent = scrollFrame
+
+-- ==========================================
+-- 3. КНОПКА AIMBOT (ОСНОВНАЯ)
+-- ==========================================
+local aimBtn = Instance.new("TextButton")
+aimBtn.Name = "AimToggleButton"
+aimBtn.Size = UDim2.new(1, -55, 1, 0)
+aimBtn.Position = UDim2.new(0, 0, 0, 0)
+aimBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+aimBtn.BackgroundTransparency = 0.4
+aimBtn.Text = ""
+aimBtn.AutoButtonColor = true
+aimBtn.Active = true
+aimBtn.Parent = aimRow
+
+local aimCorner = Instance.new("UICorner")
+aimCorner.CornerRadius = UDim.new(0, 8)
+aimCorner.Parent = aimBtn
+
+local aimLabel = Instance.new("TextLabel")
+aimLabel.Size = UDim2.new(1, -20, 1, 0)
+aimLabel.Position = UDim2.new(0, 10, 0, 0)
+aimLabel.BackgroundTransparency = 1
+aimLabel.Text = "Aimbot: OFF"
+aimLabel.Font = Enum.Font.GothamMedium
+aimLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+aimLabel.TextSize = 14
+aimLabel.TextXAlignment = Enum.TextXAlignment.Left
+aimLabel.Parent = aimBtn
+
+-- ==========================================
+-- 4. КНОПКА НАСТРОЕК AIMBOT (ШЕСТЕРЕНКА)
+-- ==========================================
+local settingsBtn = Instance.new("ImageButton")
+settingsBtn.Name = "AimSettingsButton"
+settingsBtn.Size = UDim2.new(0, 45, 0, 45)
+settingsBtn.Position = UDim2.new(1, -45, 0, 0)
+settingsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+settingsBtn.BackgroundTransparency = 0.4
+settingsBtn.AutoButtonColor = true
+settingsBtn.Active = true
+settingsBtn.Parent = aimRow
+
+local settingsCorner = Instance.new("UICorner")
+settingsCorner.CornerRadius = UDim.new(0, 8)
+settingsCorner.Parent = settingsBtn
+
+local settingsIcon = Instance.new("ImageLabel")
+settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+settingsIcon.BackgroundTransparency = 1
+settingsIcon.Image = "rbxassetid://9405931578"
+settingsIcon.Parent = settingsBtn
+
+-- ==========================================
+-- 5. ВИЗУАЛИЗАЦИЯ FOV КРУГА
+-- ==========================================
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "AimbotFOV"
+fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+fovCircle.Size = UDim2.new(0, aimSettings.FOVRadius * 2, 0, aimSettings.FOVRadius * 2)
+fovCircle.BackgroundTransparency = 1
+fovCircle.Visible = false
+fovCircle.Parent = screenGui
+
+local fovCorner = Instance.new("UICorner")
+fovCorner.CornerRadius = UDim.new(1, 0)
+fovCorner.Parent = fovCircle
+
+local fovStroke = Instance.new("UIStroke")
+fovStroke.Color = Color3.fromRGB(255, 255, 255)
+fovStroke.Transparency = 0.5
+fovStroke.Thickness = 1
+fovStroke.Parent = fovCircle
+
+RunService.RenderStepped:Connect(function()
+	if aimSettings.ShowFOV and aimSettings.Enabled then
+		local mousePos = UserInputService:GetMouseLocation()
+		fovCircle.Position = UDim2.new(0, mousePos.X, 0, mousePos.Y)
+		fovCircle.Visible = true
+	else
+		fovCircle.Visible = false
+	end
+end)
+
+-- ==========================================
+-- 6. МЕНЮ НАСТРОЕК AIMBOT
+-- ==========================================
+-- Увеличен размер меню, чтобы вместить новую кнопку Wall Check
+local aimMenu = Instance.new("CanvasGroup")
+aimMenu.Name = "AimSettingsMenu"
+aimMenu.Size = UDim2.new(0, 250, 0, 300) 
+aimMenu.Position = UDim2.new(0.5, 100, 0.5, -150)
+aimMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+aimMenu.BackgroundTransparency = 0.1
+aimMenu.GroupTransparency = 1
+aimMenu.Visible = false
+aimMenu.Parent = screenGui
+
+local aimMenuCorner = Instance.new("UICorner")
+aimMenuCorner.CornerRadius = UDim.new(0, 12)
+aimMenuCorner.Parent = aimMenu
+
+local aimMenuStroke = Instance.new("UIStroke")
+aimMenuStroke.Color = Color3.fromRGB(255, 255, 255)
+aimMenuStroke.Transparency = 0.8
+aimMenuStroke.Thickness = 1
+aimMenuStroke.Parent = aimMenu
+
+local aimMenuTitle = Instance.new("TextLabel")
+aimMenuTitle.Size = UDim2.new(1, 0, 0, 30)
+aimMenuTitle.Position = UDim2.new(0, 0, 0, 10)
+aimMenuTitle.BackgroundTransparency = 1
+aimMenuTitle.Text = "Aimbot Settings"
+aimMenuTitle.Font = Enum.Font.GothamBold
+aimMenuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+aimMenuTitle.TextSize = 16
+aimMenuTitle.Parent = aimMenu
+
+local function createSettingsBtn(text, posY, callback)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, -20, 0, 35)
+	btn.Position = UDim2.new(0, 10, 0, posY)
+	btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+	btn.Text = text
+	btn.Font = Enum.Font.GothamMedium
+	btn.TextColor3 = Color3.fromRGB(200, 200, 205)
+	btn.TextSize = 13
+	btn.Active = true
+	btn.Parent = aimMenu
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = btn
+	
+	btn.Activated:Connect(function() callback(btn) end)
+	return btn
+end
+
+createSettingsBtn("Target: " .. aimSettings.AimPart, 45, function(btn)
+	if aimSettings.AimPart == "Head" then
+		aimSettings.AimPart = "HumanoidRootPart"
+		btn.Text = "Target: Torso"
+	else
+		aimSettings.AimPart = "Head"
+		btn.Text = "Target: Head"
+	end
+end)
+
+local smoothModes = {
+	{name = "Instant", value = 1},
+	{name = "Fast", value = 0.5},
+	{name = "Smooth", value = 0.15}
+}
+local smoothIndex = 2
+
+createSettingsBtn("Speed: " .. smoothModes[smoothIndex].name, 85, function(btn)
+	smoothIndex = smoothIndex + 1
+	if smoothIndex > #smoothModes then smoothIndex = 1 end
+	aimSettings.Smoothness = smoothModes[smoothIndex].value
+	btn.Text = "Speed: " .. smoothModes[smoothIndex].name
+	aimMenuTitle.Text = "Aimbot Settings (" .. smoothModes[smoothIndex].name .. ")"
+end)
+
+createSettingsBtn("Team Check: OFF", 125, function(btn)
+	aimSettings.TeamCheck = not aimSettings.TeamCheck
+	if aimSettings.TeamCheck then
+		btn.Text = "Team Check: ON (Ignore Own)"
+		btn.TextColor3 = Color3.fromRGB(150, 255, 150)
+	else
+		btn.Text = "Team Check: OFF"
+		btn.TextColor3 = Color3.fromRGB(200, 200, 205)
+	end
+end)
+
+createSettingsBtn("Target Team: All", 165, function(btn)
+	local availableTeams = {"All"}
+	local foundTeams = {}
+	
+	for _, team in ipairs(Teams:GetTeams()) do
+		if not foundTeams[team.Name] then
+			foundTeams[team.Name] = true
+			table.insert(availableTeams, team.Name)
+		end
+	end
+	
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Team and p.Team.Name ~= "" then
+			if not foundTeams[p.Team.Name] then
+				foundTeams[p.Team.Name] = true
+				table.insert(availableTeams, p.Team.Name)
+			end
+		end
+	end
+	
+	local currentIndex = 1
+	for i, teamName in ipairs(availableTeams) do
+		if teamName == aimSettings.TargetTeam then
+			currentIndex = i
+			break
+		end
+	end
+	
+	local nextIndex = currentIndex + 1
+	if nextIndex > #availableTeams then nextIndex = 1 end
+	
+	aimSettings.TargetTeam = availableTeams[nextIndex]
+	
+	if aimSettings.TargetTeam == "All" then
+		btn.Text = "Target Team: All"
+		btn.TextColor3 = Color3.fromRGB(200, 200, 205)
+	else
+		btn.Text = "Target Team: " .. aimSettings.TargetTeam
+		btn.TextColor3 = Color3.fromRGB(255, 180, 100)
+	end
+end)
+
+-- Интеграция кнопки Wall Check из скриншота image_e9b665.png
+local wallCheckBtn = createSettingsBtn("Wall Check: ON", 205, function(btn)
+	aimSettings.WallCheck = not aimSettings.WallCheck
+	if aimSettings.WallCheck then
+		btn.Text = "Wall Check: ON"
+		btn.TextColor3 = Color3.fromRGB(150, 255, 150)
+	else
+		btn.Text = "Wall Check: OFF"
+		btn.TextColor3 = Color3.fromRGB(200, 200, 205)
+	end
+end)
+wallCheckBtn.TextColor3 = Color3.fromRGB(150, 255, 150) -- Цвет по умолчанию (ON)
+
+createSettingsBtn("Show FOV: OFF", 245, function(btn)
+	aimSettings.ShowFOV = not aimSettings.ShowFOV
+	if aimSettings.ShowFOV then
+		btn.Text = "Show FOV: ON"
+		btn.TextColor3 = Color3.fromRGB(150, 255, 150)
+	else
+		btn.Text = "Show FOV: OFF"
+		btn.TextColor3 = Color3.fromRGB(200, 200, 205)
+	end
+end)
+
+-- ==========================================
+-- 7. ЛОГИКА И АНИМАЦИИ МЕНЮ НАСТРОЕК
+-- ==========================================
+local isSettingsOpen = false
+
+settingsBtn.Activated:Connect(function()
+	isSettingsOpen = not isSettingsOpen
+	if isSettingsOpen then
+		aimMenu.Visible = true
+		TweenService:Create(aimMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			GroupTransparency = 0
+		}):Play()
+	else
+		local closeTween = TweenService:Create(aimMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
+			GroupTransparency = 1
+		})
+		closeTween:Play()
+		closeTween.Completed:Wait()
+		if not isSettingsOpen then aimMenu.Visible = false end
+	end
+end)
+
+local draggingAim, dragInputAim, dragStartAim, startPosAim
+aimMenu.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingAim = true
+		dragStartAim = input.Position
+		startPosAim = aimMenu.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then draggingAim = false end
+		end)
+	end
+end)
+
+aimMenu.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInputAim = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInputAim and draggingAim then
+		local delta = input.Position - dragStartAim
+		TweenService:Create(aimMenu, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+			Position = UDim2.new(startPosAim.X.Scale, startPosAim.X.Offset + delta.X, startPosAim.Y.Scale, startPosAim.Y.Offset + delta.Y)
+		}):Play()
+	end
+end)
+
+-- ==========================================
+-- 8. ДИНАМИЧЕСКОЕ ЯДРО АИМБОТА И ФУНКЦИЯ ПРОВЕРКИ СТЕН (RAYCAST)
+-- ==========================================
+
+-- Проверка препятствий (Wall Check)
+local function isVisible(targetPart, currentCamera)
+	if not aimSettings.WallCheck then return true end
+	
+	local localChar = player.Character
+	if not localChar then return false end
+
+	local rayOrigin = currentCamera.CFrame.Position
+	local rayDirection = targetPart.Position - rayOrigin
+
+	local rayParams = RaycastParams.new()
+	rayParams.FilterDescendantsInstances = {localChar, currentCamera} -- Игнорируем себя и камеру
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.IgnoreWater = true
+
+	local rayResult = Workspace:Raycast(rayOrigin, rayDirection, rayParams)
+	
+	-- Если луч что-то задел, проверяем, принадлежит ли это цели
+	if rayResult then
+		if rayResult.Instance:IsDescendantOf(targetPart.Parent) then
+			return true
+		end
+		return false -- Луч врезался в стену или другой объект
+	end
+	
+	return true
+end
+
+-- Функция умного поиска части тела (исправляет невидимость кастомных скинов)
+local function getTargetPart(char)
+	if aimSettings.AimPart == "Head" then
+		return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+	else
+		return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char.PrimaryPart
+	end
+end
+
+local function getClosestPlayer()
+	local closestPlayer = nil
+	local shortestDistance = aimSettings.FOVRadius
+	local mouseLocation = UserInputService:GetMouseLocation()
+	
+	local currentCamera = Workspace.CurrentCamera 
+	if not currentCamera then return nil end
+	
+	for _, v in pairs(Players:GetPlayers()) do
+		if v ~= player then
+			if aimSettings.TeamCheck and v.Team == player.Team then continue end
+			if aimSettings.TargetTeam ~= "All" and (not v.Team or v.Team.Name ~= aimSettings.TargetTeam) then continue end
+			
+			local char = v.Character
+			-- Проверяем живой ли персонаж
+			if char and char:FindFirstChildOfClass("Humanoid") and char:FindFirstChildOfClass("Humanoid").Health > 0 then
+				local targetPart = getTargetPart(char)
+				
+				if targetPart then
+					local vector, onScreen = currentCamera:WorldToViewportPoint(targetPart.Position)
+					
+					-- Если на экране и проходит проверку стен
+					if onScreen and isVisible(targetPart, currentCamera) then
+						local distance = (Vector2.new(mouseLocation.X, mouseLocation.Y) - Vector2.new(vector.X, vector.Y)).Magnitude
+						
+						if distance < shortestDistance then
+							closestPlayer = char
+							shortestDistance = distance
+						end
+					end
+				end
+			end
+		end
+	end
+	
+	return closestPlayer
+end
+
+aimBtn.Activated:Connect(function()
+	aimSettings.Enabled = not aimSettings.Enabled
+	
+	if aimSettings.Enabled then
+		aimLabel.Text = "Aimbot: ON"
+		aimLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+		aimBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+		
+		aimConnection = RunService.RenderStepped:Connect(function()
+			if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+				local targetChar = getClosestPlayer()
+				local currentCamera = Workspace.CurrentCamera 
+				
+				if targetChar and currentCamera then
+					local targetPart = getTargetPart(targetChar)
+					if targetPart then
+						local targetCFrame = CFrame.new(currentCamera.CFrame.Position, targetPart.Position)
+						currentCamera.CFrame = currentCamera.CFrame:Lerp(targetCFrame, aimSettings.Smoothness)
+					end
+				end
+			end
+		end)
+	else
+		aimLabel.Text = "Aimbot: OFF"
+		aimLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		aimBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		
+		if aimConnection then
+			aimConnection:Disconnect()
+			aimConnection = nil
+		end
+	end
+end)
