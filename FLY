@@ -1,0 +1,358 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+
+-- ==========================================
+-- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- ==========================================
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+-- ==========================================
+-- 2. НАСТРОЙКИ ПОЛЕТА И СОСТОЯНИЯ
+-- ==========================================
+local flySettings = {
+	Enabled = false,
+	Speed = 50 -- Стандартная скорость полета
+}
+
+local flyConnection = nil
+local bodyVelocity = nil
+local bodyGyro = nil
+
+-- ==========================================
+-- 3. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
+-- ==========================================
+local flyRow = Instance.new("Frame")
+flyRow.Name = "FlyRow"
+flyRow.Size = UDim2.new(1, -15, 0, 45)
+flyRow.BackgroundTransparency = 1
+flyRow.LayoutOrder = 6 -- Встает после Noclip (у которого 5)
+flyRow.Parent = scrollFrame
+
+-- ==========================================
+-- 4. КНОПКА FLY (ОСНОВНАЯ)
+-- ==========================================
+local flyBtn = Instance.new("TextButton")
+flyBtn.Name = "FlyToggleButton"
+flyBtn.Size = UDim2.new(1, -55, 1, 0)
+flyBtn.Position = UDim2.new(0, 0, 0, 0)
+flyBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+flyBtn.BackgroundTransparency = 0.4
+flyBtn.Text = ""
+flyBtn.AutoButtonColor = true
+flyBtn.Active = true
+flyBtn.Parent = flyRow
+
+local flyCorner = Instance.new("UICorner")
+flyCorner.CornerRadius = UDim.new(0, 8)
+flyCorner.Parent = flyBtn
+
+local flyLabel = Instance.new("TextLabel")
+flyLabel.Size = UDim2.new(1, -20, 1, 0)
+flyLabel.Position = UDim2.new(0, 10, 0, 0)
+flyLabel.BackgroundTransparency = 1
+flyLabel.Text = "Fly: OFF"
+flyLabel.Font = Enum.Font.GothamMedium
+flyLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+flyLabel.TextSize = 14
+flyLabel.TextXAlignment = Enum.TextXAlignment.Left
+flyLabel.Parent = flyBtn
+
+-- ==========================================
+-- 5. КНОПКА НАСТРОЕК FLY (ШЕСТЕРЕНКА)
+-- ==========================================
+local settingsBtn = Instance.new("ImageButton")
+settingsBtn.Name = "FlySettingsButton"
+settingsBtn.Size = UDim2.new(0, 45, 0, 45)
+settingsBtn.Position = UDim2.new(1, -45, 0, 0)
+settingsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+settingsBtn.BackgroundTransparency = 0.4
+settingsBtn.AutoButtonColor = true
+settingsBtn.Active = true
+settingsBtn.Parent = flyRow
+
+local settingsCorner = Instance.new("UICorner")
+settingsCorner.CornerRadius = UDim.new(0, 8)
+settingsCorner.Parent = settingsBtn
+
+local settingsIcon = Instance.new("ImageLabel")
+settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+settingsIcon.BackgroundTransparency = 1
+settingsIcon.Image = "rbxassetid://9405931578" -- Иконка шестеренки
+settingsIcon.Parent = settingsBtn
+
+-- ==========================================
+-- 6. МЕНЮ НАСТРОЕК FLY (ПЛАВАЮЩЕЕ)
+-- ==========================================
+local flyMenu = Instance.new("CanvasGroup")
+flyMenu.Name = "FlySettingsMenu"
+flyMenu.Size = UDim2.new(0, 250, 0, 180)
+flyMenu.Position = UDim2.new(0.5, -360, 0.5, -110) -- Появляется слева от центра
+flyMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+flyMenu.BackgroundTransparency = 0.1
+flyMenu.GroupTransparency = 1
+flyMenu.Visible = false
+flyMenu.Parent = screenGui
+
+local flyMenuCorner = Instance.new("UICorner")
+flyMenuCorner.CornerRadius = UDim.new(0, 12)
+flyMenuCorner.Parent = flyMenu
+
+local flyMenuStroke = Instance.new("UIStroke")
+flyMenuStroke.Color = Color3.fromRGB(255, 255, 255)
+flyMenuStroke.Transparency = 0.8
+flyMenuStroke.Thickness = 1
+flyMenuStroke.Parent = flyMenu
+
+local flyMenuTitle = Instance.new("TextLabel")
+flyMenuTitle.Size = UDim2.new(1, 0, 0, 30)
+flyMenuTitle.Position = UDim2.new(0, 0, 0, 10)
+flyMenuTitle.BackgroundTransparency = 1
+flyMenuTitle.Text = "Fly Settings"
+flyMenuTitle.Font = Enum.Font.GothamBold
+flyMenuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+flyMenuTitle.TextSize = 16
+flyMenuTitle.Parent = flyMenu
+
+-- Поле ввода скорости
+local speedBox = Instance.new("TextBox")
+speedBox.Size = UDim2.new(1, -20, 0, 35)
+speedBox.Position = UDim2.new(0, 10, 0, 50)
+speedBox.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+speedBox.PlaceholderText = "Enter a number (Default: 50)"
+speedBox.Text = tostring(flySettings.Speed)
+speedBox.Font = Enum.Font.Gotham
+speedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+speedBox.TextSize = 13
+speedBox.Parent = flyMenu
+
+local speedCorner = Instance.new("UICorner")
+speedCorner.CornerRadius = UDim.new(0, 6)
+speedCorner.Parent = speedBox
+
+local speedStroke = Instance.new("UIStroke")
+speedStroke.Color = Color3.fromRGB(100, 100, 110)
+speedStroke.Parent = speedBox
+
+-- Подпись для быстрых пресетов
+local presetsLabel = Instance.new("TextLabel")
+presetsLabel.Size = UDim2.new(1, 0, 0, 20)
+presetsLabel.Position = UDim2.new(0, 0, 0, 95)
+presetsLabel.BackgroundTransparency = 1
+presetsLabel.Text = "Quick Settings:"
+presetsLabel.Font = Enum.Font.Gotham
+presetsLabel.TextColor3 = Color3.fromRGB(180, 180, 185)
+presetsLabel.TextSize = 12
+presetsLabel.Parent = flyMenu
+
+-- Контейнер для быстрых скоростей
+local speedsFrame = Instance.new("Frame")
+speedsFrame.Size = UDim2.new(1, -20, 0, 35)
+speedsFrame.Position = UDim2.new(0, 10, 0, 120)
+speedsFrame.BackgroundTransparency = 1
+speedsFrame.Parent = flyMenu
+
+local speedsLayout = Instance.new("UIListLayout")
+speedsLayout.FillDirection = Enum.FillDirection.Horizontal
+speedsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+speedsLayout.Padding = UDim.new(0, 8)
+speedsLayout.Parent = speedsFrame
+
+local function createSpeedBtn(speedValue, displayName)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 45, 0, 30)
+	btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+	btn.Text = displayName
+	btn.Font = Enum.Font.GothamBold
+	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btn.TextSize = 12
+	btn.Active = true
+	btn.Parent = speedsFrame
+	
+	local btnRound = Instance.new("UICorner")
+	btnRound.CornerRadius = UDim.new(0, 6)
+	btnRound.Parent = btn
+	
+	btn.Activated:Connect(function()
+		flySettings.Speed = speedValue
+		speedBox.Text = tostring(speedValue)
+	end)
+end
+
+-- Кнопки пресетов скорости
+createSpeedBtn(16, "Walk")
+createSpeedBtn(50, "Fast")
+createSpeedBtn(150, "Sonic")
+createSpeedBtn(300, "Flash")
+
+-- ==========================================
+-- 7. ЛОГИКА И АНИМАЦИИ МЕНЮ НАСТРОЕК
+-- ==========================================
+local isSettingsOpen = false
+
+settingsBtn.Activated:Connect(function()
+	isSettingsOpen = not isSettingsOpen
+	if isSettingsOpen then
+		flyMenu.Visible = true
+		TweenService:Create(flyMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			GroupTransparency = 0
+		}):Play()
+	else
+		local closeTween = TweenService:Create(flyMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
+			GroupTransparency = 1
+		})
+		closeTween:Play()
+		closeTween.Completed:Wait()
+		if not isSettingsOpen then
+			flyMenu.Visible = false
+		end
+	end
+end)
+
+-- Обновление скорости из поля ввода
+speedBox.FocusLost:Connect(function()
+	local num = tonumber(speedBox.Text)
+	if num then
+		flySettings.Speed = num
+	else
+		-- Если ввели буквы, возвращаем старое значение
+		speedBox.Text = tostring(flySettings.Speed)
+	end
+end)
+
+-- Система перетаскивания (Drag)
+local draggingFly, dragInputFly, dragStartFly, startPosFly
+flyMenu.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingFly = true
+		dragStartFly = input.Position
+		startPosFly = flyMenu.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then draggingFly = false end
+		end)
+	end
+end)
+
+flyMenu.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInputFly = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInputFly and draggingFly then
+		local delta = input.Position - dragStartFly
+		TweenService:Create(flyMenu, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+			Position = UDim2.new(startPosFly.X.Scale, startPosFly.X.Offset + delta.X, startPosFly.Y.Scale, startPosFly.Y.Offset + delta.Y)
+		}):Play()
+	end
+end)
+
+-- ==========================================
+-- 8. ЛОГИКА ПОЛЕТА
+-- ==========================================
+local function stopFlying()
+	if flyConnection then
+		flyConnection:Disconnect()
+		flyConnection = nil
+	end
+	if bodyVelocity then bodyVelocity:Destroy() bodyVelocity = nil end
+	if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
+	
+	if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+		player.Character:FindFirstChildOfClass("Humanoid").PlatformStand = false
+	end
+end
+
+local function toggleFly()
+	flySettings.Enabled = not flySettings.Enabled
+	
+	if flySettings.Enabled then
+		-- Визуальное включение
+		flyLabel.Text = "Fly: ON"
+		flyLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+		flyBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+		
+		local char = player.Character
+		if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		
+		-- Убираем анимацию ходьбы/падения
+		if humanoid then humanoid.PlatformStand = true end
+		
+		-- Создаем "моторы" для полета
+		bodyVelocity = Instance.new("BodyVelocity")
+		bodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+		bodyVelocity.Velocity = Vector3.zero
+		bodyVelocity.Parent = hrp
+		
+		-- BodyGyro заставляет персонажа смотреть в определенную сторону (по камере)
+		bodyGyro = Instance.new("BodyGyro")
+		bodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+		bodyGyro.P = 9e4
+		bodyGyro.CFrame = workspace.CurrentCamera.CFrame
+		bodyGyro.Parent = hrp
+		
+		-- Цикл обработки направления и скорости
+		flyConnection = RunService.RenderStepped:Connect(function()
+			if not char or not char:FindFirstChild("HumanoidRootPart") or not humanoid or humanoid.Health <= 0 then
+				toggleFly() -- Безопасное авто-отключение при смерти
+				return
+			end
+			
+			local cam = workspace.CurrentCamera
+			local moveDir = Vector3.zero
+			
+			-- Считываем нажатия клавиш (WASD + Space + LCtrl)
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir += cam.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir -= cam.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir += cam.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir -= cam.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir += Vector3.new(0, 1, 0) end
+			if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then moveDir -= Vector3.new(0, 1, 0) end
+			
+			-- Нормализация вектора, чтобы по диагонали скорость не умножалась
+			if moveDir.Magnitude > 0 then
+				moveDir = moveDir.Unit
+			end
+			
+			-- Применяем скорость
+			bodyVelocity.Velocity = moveDir * flySettings.Speed
+			
+			-- Персонаж всегда смотрит туда, куда смотрит камера
+			bodyGyro.CFrame = cam.CFrame
+		end)
+		
+	else
+		-- Визуальное выключение
+		flyLabel.Text = "Fly: OFF"
+		flyLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		flyBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		
+		stopFlying()
+	end
+end
+
+flyBtn.Activated:Connect(toggleFly)
+
+-- Защита от багов при перерождении (как в твоем Noclip)
+player.CharacterAdded:Connect(function()
+	if flySettings.Enabled then
+		toggleFly() 
+	end
+end)
