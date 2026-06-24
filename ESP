@@ -1,0 +1,438 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Teams = game:GetService("Teams") -- Подключаем сервис команд
+
+local player = Players.LocalPlayer
+
+-- Ожидание загрузки основного интерфейса FusionHub
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+-- ==========================================
+-- 1. НАСТРОЙКИ ESP И СОСТОЯНИЯ
+-- ==========================================
+local espSettings = {
+	Enabled = false,
+	Mode = "All", -- "All" (Все), "Team:[Имя]" (Конкретная команда), "Target" (Цель)
+	TargetName = "",
+	Color = Color3.fromRGB(255, 50, 50)
+}
+
+local espObjects = {} -- Таблица для хранения созданных элементов Highlight
+local espConnection = nil
+
+-- ==========================================
+-- 2. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
+-- ==========================================
+local espRow = Instance.new("Frame")
+espRow.Name = "EspRow"
+espRow.Size = UDim2.new(1, -15, 0, 45)
+espRow.BackgroundTransparency = 1
+espRow.LayoutOrder = 4 -- Встает в список после стандартных кнопок
+espRow.Parent = scrollFrame
+
+-- ==========================================
+-- 3. КНОПКА ESP (ОСНОВНАЯ)
+-- ==========================================
+local espBtn = Instance.new("TextButton")
+espBtn.Name = "EspToggleButton"
+espBtn.Size = UDim2.new(1, -55, 1, 0) -- Оставляем место справа для шестеренки
+espBtn.Position = UDim2.new(0, 0, 0, 0)
+espBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+espBtn.BackgroundTransparency = 0.4
+espBtn.Text = ""
+espBtn.AutoButtonColor = true
+espBtn.Active = true
+espBtn.Parent = espRow
+
+local espCorner = Instance.new("UICorner")
+espCorner.CornerRadius = UDim.new(0, 8)
+espCorner.Parent = espBtn
+
+local espLabel = Instance.new("TextLabel")
+espLabel.Size = UDim2.new(1, -20, 1, 0)
+espLabel.Position = UDim2.new(0, 10, 0, 0)
+espLabel.BackgroundTransparency = 1
+espLabel.Text = "ESP: OFF"
+espLabel.Font = Enum.Font.GothamMedium
+espLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+espLabel.TextSize = 14
+espLabel.TextXAlignment = Enum.TextXAlignment.Left
+espLabel.Parent = espBtn
+
+-- ==========================================
+-- 4. КНОПКА НАСТРОЕК ESP (ШЕСТЕРЕНКА)
+-- ==========================================
+local settingsBtn = Instance.new("ImageButton")
+settingsBtn.Name = "EspSettingsButton"
+settingsBtn.Size = UDim2.new(0, 45, 0, 45)
+settingsBtn.Position = UDim2.new(1, -45, 0, 0)
+settingsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+settingsBtn.BackgroundTransparency = 0.4
+settingsBtn.AutoButtonColor = true
+settingsBtn.Active = true
+settingsBtn.Parent = espRow
+
+local settingsCorner = Instance.new("UICorner")
+settingsCorner.CornerRadius = UDim.new(0, 8)
+settingsCorner.Parent = settingsBtn
+
+local settingsIcon = Instance.new("ImageLabel")
+settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+settingsIcon.BackgroundTransparency = 1
+settingsIcon.Image = "rbxassetid://9405931578" -- Твоя текстура шестеренки
+settingsIcon.Parent = settingsBtn
+
+-- ==========================================
+-- 5. МЕНЮ НАСТРОЕК ESP (ПЛАВАЮЩЕЕ)
+-- ==========================================
+local espMenu = Instance.new("CanvasGroup")
+espMenu.Name = "EspSettingsMenu"
+espMenu.Size = UDim2.new(0, 250, 0, 220)
+espMenu.Position = UDim2.new(0.5, 100, 0.5, -110) -- Появляется чуть правее центра экрана
+espMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+espMenu.BackgroundTransparency = 0.1
+espMenu.GroupTransparency = 1
+espMenu.Visible = false
+espMenu.Parent = screenGui
+
+local espMenuCorner = Instance.new("UICorner")
+espMenuCorner.CornerRadius = UDim.new(0, 12)
+espMenuCorner.Parent = espMenu
+
+local espMenuStroke = Instance.new("UIStroke")
+espMenuStroke.Color = Color3.fromRGB(255, 255, 255)
+espMenuStroke.Transparency = 0.8
+espMenuStroke.Thickness = 1
+espMenuStroke.Parent = espMenu
+
+local espMenuTitle = Instance.new("TextLabel")
+espMenuTitle.Size = UDim2.new(1, 0, 0, 30)
+espMenuTitle.Position = UDim2.new(0, 0, 0, 10)
+espMenuTitle.BackgroundTransparency = 1
+espMenuTitle.Text = "ESP Settings"
+espMenuTitle.Font = Enum.Font.GothamBold
+espMenuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+espMenuTitle.TextSize = 16
+espMenuTitle.Parent = espMenu
+
+-- Кнопка переключения режимов (Все / Конкретная Команда / Цель)
+local modeBtn = Instance.new("TextButton")
+modeBtn.Size = UDim2.new(1, -20, 0, 35)
+modeBtn.Position = UDim2.new(0, 10, 0, 50)
+modeBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+modeBtn.Text = "Mode: All"
+modeBtn.Font = Enum.Font.GothamMedium
+modeBtn.TextColor3 = Color3.fromRGB(200, 200, 205)
+modeBtn.TextSize = 13
+modeBtn.Active = true
+modeBtn.Parent = espMenu
+
+local modeCorner = Instance.new("UICorner")
+modeCorner.CornerRadius = UDim.new(0, 6)
+modeCorner.Parent = modeBtn
+
+-- Поле ввода никнейма для режима "Target"
+local targetBox = Instance.new("TextBox")
+targetBox.Size = UDim2.new(1, -20, 0, 35)
+targetBox.Position = UDim2.new(0, 10, 0, 95)
+targetBox.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+targetBox.PlaceholderText = "Enter the player's nickname..."
+targetBox.Text = ""
+targetBox.Font = Enum.Font.Gotham
+targetBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+targetBox.TextSize = 13
+targetBox.Visible = false
+targetBox.Parent = espMenu
+
+local targetCorner = Instance.new("UICorner")
+targetCorner.CornerRadius = UDim.new(0, 6)
+targetCorner.Parent = targetBox
+
+local targetStroke = Instance.new("UIStroke")
+targetStroke.Color = Color3.fromRGB(100, 100, 110)
+targetStroke.Parent = targetBox
+
+-- Контейнер для выбора цвета
+local colorsFrame = Instance.new("Frame")
+colorsFrame.Size = UDim2.new(1, -20, 0, 35)
+colorsFrame.Position = UDim2.new(0, 10, 0, 140)
+colorsFrame.BackgroundTransparency = 1
+colorsFrame.Parent = espMenu
+
+local colorsLayout = Instance.new("UIListLayout")
+colorsLayout.FillDirection = Enum.FillDirection.Horizontal
+colorsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+colorsLayout.Padding = UDim.new(0, 10)
+colorsLayout.Parent = colorsFrame
+
+local function createColorBtn(color)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 30, 0, 30)
+	btn.BackgroundColor3 = color
+	btn.Text = ""
+	btn.Active = true
+	btn.Parent = colorsFrame
+	
+	local btnRound = Instance.new("UICorner")
+	btnRound.CornerRadius = UDim.new(1, 0)
+	btnRound.Parent = btn
+	
+	local btnStroke = Instance.new("UIStroke")
+	btnStroke.Color = Color3.fromRGB(255, 255, 255)
+	btnStroke.Thickness = 1.5
+	btnStroke.Parent = btn
+	
+	btn.Activated:Connect(function()
+		espSettings.Color = color
+	end)
+end
+
+-- Палитра быстрых цветов
+createColorBtn(Color3.fromRGB(255, 50, 50))   -- Красный
+createColorBtn(Color3.fromRGB(50, 255, 50))   -- Зеленый
+createColorBtn(Color3.fromRGB(50, 150, 255))  -- Синий
+createColorBtn(Color3.fromRGB(255, 255, 50))  -- Желтый
+createColorBtn(Color3.fromRGB(255, 50, 255))  -- Пурпурный
+
+-- ==========================================
+-- 6. ЛОГИКА И АНИМАЦИИ МЕНЮ НАСТРОЕК
+-- ==========================================
+local isSettingsOpen = false
+
+settingsBtn.Activated:Connect(function()
+	isSettingsOpen = not isSettingsOpen
+	if isSettingsOpen then
+		espMenu.Visible = true
+		TweenService:Create(espMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			GroupTransparency = 0
+		}):Play()
+	else
+		local closeTween = TweenService:Create(espMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
+			GroupTransparency = 1
+		})
+		closeTween:Play()
+		closeTween.Completed:Wait()
+		if not isSettingsOpen then
+			espMenu.Visible = false
+		end
+	end
+end)
+
+-- Система перетаскивания (Drag) для меню настроек ESP
+local draggingEsp, dragInputEsp, dragStartEsp, startPosEsp
+espMenu.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingEsp = true
+		dragStartEsp = input.Position
+		startPosEsp = espMenu.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then draggingEsp = false end
+		end)
+	end
+end)
+
+espMenu.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInputEsp = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInputEsp and draggingEsp then
+		local delta = input.Position - dragStartEsp
+		TweenService:Create(espMenu, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+			Position = UDim2.new(startPosEsp.X.Scale, startPosEsp.X.Offset + delta.X, startPosEsp.Y.Scale, startPosEsp.Y.Offset + delta.Y)
+		}):Play()
+	end
+end)
+
+-- Улучшенная логика смены режимов: Ищем команды везде
+modeBtn.Activated:Connect(function()
+	local availableModes = {"All"}
+	local foundTeams = {} -- Таблица для исключения дубликатов
+	
+	-- 1. Сначала пытаемся получить из стандартного сервиса Teams
+	for _, team in ipairs(Teams:GetTeams()) do
+		if not foundTeams[team.Name] then
+			foundTeams[team.Name] = true
+			table.insert(availableModes, "Team:" .. team.Name)
+		end
+	end
+	
+	-- 2. Надежный фоллбэк: ищем команды прямо у игроков на сервере
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Team and p.Team.Name ~= "" then
+			if not foundTeams[p.Team.Name] then
+				foundTeams[p.Team.Name] = true
+				table.insert(availableModes, "Team:" .. p.Team.Name)
+			end
+		end
+	end
+	
+	table.insert(availableModes, "Target") -- В конце всегда добавляем поиск по цели
+	
+	-- Ищем текущий индекс
+	local currentIndex = 1
+	for i, mode in ipairs(availableModes) do
+		if mode == espSettings.Mode then
+			currentIndex = i
+			break
+		end
+	end
+	
+	-- Переключаем на следующий индекс (или сбрасываем на 1, если дошли до конца)
+	local nextIndex = currentIndex + 1
+	if nextIndex > #availableModes then
+		nextIndex = 1
+	end
+	
+	local newMode = availableModes[nextIndex]
+	espSettings.Mode = newMode
+	
+	-- Обновляем визуал кнопки
+	if newMode == "All" then
+		modeBtn.Text = "Mode: All"
+		targetBox.Visible = false
+	elseif newMode == "Target" then
+		modeBtn.Text = "Mode: Target"
+		targetBox.Visible = true
+	elseif string.sub(newMode, 1, 5) == "Team:" then
+		local teamName = string.sub(newMode, 6)
+		modeBtn.Text = "Команда: " .. teamName
+		targetBox.Visible = false
+	end
+end)
+
+targetBox.FocusLost:Connect(function()
+	espSettings.TargetName = string.lower(targetBox.Text)
+end)
+
+-- ==========================================
+-- 7. ФУНКЦИОНАЛ ПОДСВЕТКИ (ESP)
+-- ==========================================
+local function clearESP()
+	for p, highlight in pairs(espObjects) do
+		if highlight then highlight:Destroy() end
+	end
+	table.clear(espObjects)
+end
+
+local function updateESP()
+	if not espSettings.Enabled then
+		clearESP()
+		return
+	end
+
+	for _, v in pairs(Players:GetPlayers()) do
+		if v ~= player then
+			local char = v.Character
+			local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			
+			if char and hrp and humanoid and humanoid.Health > 0 then
+				local shouldHighlight = false
+				
+				-- Проверка условий фильтрации
+				if espSettings.Mode == "All" then
+					shouldHighlight = true
+					
+				elseif string.sub(espSettings.Mode, 1, 5) == "Team:" then
+					-- Проверяем принадлежность к выбранной команде
+					local targetTeamName = string.sub(espSettings.Mode, 6)
+					if v.Team and v.Team.Name == targetTeamName then
+						shouldHighlight = true
+					end
+					
+				elseif espSettings.Mode == "Target" then
+					if espSettings.TargetName ~= "" then
+						local nameLower = string.lower(v.Name)
+						local displayLower = string.lower(v.DisplayName)
+						if string.find(nameLower, espSettings.TargetName) or string.find(displayLower, espSettings.TargetName) then
+							shouldHighlight = true
+						end
+					end
+				end
+				
+				-- Применение или удаление Highlight эффекта
+				if shouldHighlight then
+					local highlight = espObjects[v]
+					
+					-- Пересоздаем, если объект был удален движком
+					if not highlight or not highlight:IsDescendantOf(game) then
+						if highlight then highlight:Destroy() end
+						highlight = Instance.new("Highlight")
+						highlight.Name = "FusionESP"
+						highlight.FillTransparency = 0.5
+						highlight.OutlineTransparency = 0.1
+						highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+						highlight.Parent = char
+						espObjects[v] = highlight
+					end
+					
+					-- Обновляем динамические свойства
+					highlight.FillColor = espSettings.Color
+					highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+					if highlight.Parent ~= char then
+						highlight.Parent = char
+					end
+				else
+					if espObjects[v] then
+						espObjects[v]:Destroy()
+						espObjects[v] = nil
+					end
+				end
+			else
+				-- Если персонаж умер, вышел или удалился из игры
+				if espObjects[v] then
+					espObjects[v]:Destroy()
+					espObjects[v] = nil
+				end
+			end
+		end
+	end
+end
+
+-- Обработка включения / выключения по кнопке
+espBtn.Activated:Connect(function()
+	espSettings.Enabled = not espSettings.Enabled
+	
+	if espSettings.Enabled then
+		espLabel.Text = "ESP: ON"
+		espLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+		espBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+		
+		-- Привязываем безопасный цикл обновления
+		espConnection = RunService.Heartbeat:Connect(updateESP)
+	else
+		espLabel.Text = "ESP: OFF"
+		espLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		espBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		
+		if espConnection then
+			espConnection:Disconnect()
+			espConnection = nil
+		end
+		clearESP()
+	end
+end)
+
+-- Очистка памяти при выходе игроков с сервера
+Players.PlayerRemoving:Connect(function(leavingPlayer)
+	if espObjects[leavingPlayer] then
+		espObjects[leavingPlayer]:Destroy()
+		espObjects[leavingPlayer] = nil
+	end
+end)
