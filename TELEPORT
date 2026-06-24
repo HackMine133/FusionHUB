@@ -1,0 +1,280 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+
+-- ==========================================
+-- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- ==========================================
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+-- ==========================================
+-- 2. ПЕРЕМЕННЫЕ ТОЧКИ (WAYPOINT)
+-- ==========================================
+local savedCFrame = nil
+local waypointCube = nil
+
+-- ==========================================
+-- 3. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
+-- ==========================================
+local waypointRow = Instance.new("Frame")
+waypointRow.Name = "WaypointRow"
+waypointRow.Size = UDim2.new(1, -15, 0, 45)
+waypointRow.BackgroundTransparency = 1
+waypointRow.LayoutOrder = 8 -- Встает после Speed (у которого 7)
+waypointRow.Parent = scrollFrame
+
+-- ==========================================
+-- 4. ОСНОВНАЯ КНОПКА ТЕЛЕПОРТА
+-- ==========================================
+local tpBtn = Instance.new("TextButton")
+tpBtn.Name = "WaypointTeleportButton"
+tpBtn.Size = UDim2.new(1, -55, 1, 0)
+tpBtn.Position = UDim2.new(0, 0, 0, 0)
+tpBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+tpBtn.BackgroundTransparency = 0.4
+tpBtn.Text = ""
+tpBtn.AutoButtonColor = true
+tpBtn.Active = true
+tpBtn.Parent = waypointRow
+
+local tpCorner = Instance.new("UICorner")
+tpCorner.CornerRadius = UDim.new(0, 8)
+tpCorner.Parent = tpBtn
+
+local tpLabel = Instance.new("TextLabel")
+tpLabel.Size = UDim2.new(1, -20, 1, 0)
+tpLabel.Position = UDim2.new(0, 10, 0, 0)
+tpLabel.BackgroundTransparency = 1
+tpLabel.Text = "Teleport to a point"
+tpLabel.Font = Enum.Font.GothamMedium
+tpLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+tpLabel.TextSize = 14
+tpLabel.TextXAlignment = Enum.TextXAlignment.Left
+tpLabel.Parent = tpBtn
+
+-- ==========================================
+-- 5. КНОПКА НАСТРОЕК (ШЕСТЕРЕНКА)
+-- ==========================================
+local settingsBtn = Instance.new("ImageButton")
+settingsBtn.Name = "WaypointSettingsButton"
+settingsBtn.Size = UDim2.new(0, 45, 0, 45)
+settingsBtn.Position = UDim2.new(1, -45, 0, 0)
+settingsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+settingsBtn.BackgroundTransparency = 0.4
+settingsBtn.AutoButtonColor = true
+settingsBtn.Active = true
+settingsBtn.Parent = waypointRow
+
+local settingsCorner = Instance.new("UICorner")
+settingsCorner.CornerRadius = UDim.new(0, 8)
+settingsCorner.Parent = settingsBtn
+
+local settingsIcon = Instance.new("ImageLabel")
+settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+settingsIcon.BackgroundTransparency = 1
+settingsIcon.Image = "rbxassetid://9405931578" -- Иконка шестеренки
+settingsIcon.Parent = settingsBtn
+
+-- ==========================================
+-- 6. МЕНЮ НАСТРОЕК (ПЛАВАЮЩЕЕ)
+-- ==========================================
+local wpMenu = Instance.new("CanvasGroup")
+wpMenu.Name = "WaypointSettingsMenu"
+wpMenu.Size = UDim2.new(0, 250, 0, 145)
+wpMenu.Position = UDim2.new(0.5, 100, 0.5, 120) -- Появляется правее
+wpMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+wpMenu.BackgroundTransparency = 0.1
+wpMenu.GroupTransparency = 1
+wpMenu.Visible = false
+wpMenu.Parent = screenGui
+
+local wpMenuCorner = Instance.new("UICorner")
+wpMenuCorner.CornerRadius = UDim.new(0, 12)
+wpMenuCorner.Parent = wpMenu
+
+local wpMenuStroke = Instance.new("UIStroke")
+wpMenuStroke.Color = Color3.fromRGB(255, 255, 255)
+wpMenuStroke.Transparency = 0.8
+wpMenuStroke.Thickness = 1
+wpMenuStroke.Parent = wpMenu
+
+local wpMenuTitle = Instance.new("TextLabel")
+wpMenuTitle.Size = UDim2.new(1, 0, 0, 30)
+wpMenuTitle.Position = UDim2.new(0, 0, 0, 10)
+wpMenuTitle.BackgroundTransparency = 1
+wpMenuTitle.Text = "Point Settings"
+wpMenuTitle.Font = Enum.Font.GothamBold
+wpMenuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+wpMenuTitle.TextSize = 16
+wpMenuTitle.Parent = wpMenu
+
+-- Кнопка создания/обновления точки
+local createBtn = Instance.new("TextButton")
+createBtn.Size = UDim2.new(1, -20, 0, 35)
+createBtn.Position = UDim2.new(0, 10, 0, 50)
+createBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35) -- Зеленоватый оттенок
+createBtn.Text = "Create a point"
+createBtn.Font = Enum.Font.GothamMedium
+createBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+createBtn.TextSize = 13
+createBtn.Parent = wpMenu
+
+local createCorner = Instance.new("UICorner")
+createCorner.CornerRadius = UDim.new(0, 6)
+createCorner.Parent = createBtn
+
+-- Кнопка удаления точки
+local deleteBtn = Instance.new("TextButton")
+deleteBtn.Size = UDim2.new(1, -20, 0, 35)
+deleteBtn.Position = UDim2.new(0, 10, 0, 95)
+deleteBtn.BackgroundColor3 = Color3.fromRGB(180, 45, 45) -- Красный оттенок
+deleteBtn.Text = "Delete a point"
+deleteBtn.Font = Enum.Font.GothamMedium
+deleteBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+deleteBtn.TextSize = 13
+deleteBtn.Parent = wpMenu
+
+local deleteCorner = Instance.new("UICorner")
+deleteCorner.CornerRadius = UDim.new(0, 6)
+deleteCorner.Parent = deleteBtn
+
+-- ==========================================
+-- 7. ЛОГИКА И АНИМАЦИИ МЕНЮ НАСТРОЕК
+-- ==========================================
+local isSettingsOpen = false
+
+settingsBtn.Activated:Connect(function()
+	isSettingsOpen = not isSettingsOpen
+	if isSettingsOpen then
+		wpMenu.Visible = true
+		TweenService:Create(wpMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			GroupTransparency = 0
+		}):Play()
+	else
+		local closeTween = TweenService:Create(wpMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
+			GroupTransparency = 1
+		})
+		closeTween:Play()
+		closeTween.Completed:Wait()
+		if not isSettingsOpen then
+			wpMenu.Visible = false
+		end
+	end
+end)
+
+-- Система перетаскивания (Drag)
+local draggingWp, dragInputWp, dragStartWp, startPosWp
+wpMenu.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingWp = true
+		dragStartWp = input.Position
+		startPosWp = wpMenu.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then draggingWp = false end
+		end)
+	end
+end)
+
+wpMenu.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInputWp = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInputWp and draggingWp then
+		local delta = input.Position - dragStartWp
+		TweenService:Create(wpMenu, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+			Position = UDim2.new(startPosWp.X.Scale, startPosWp.X.Offset + delta.X, startPosWp.Y.Scale, startPosWp.Y.Offset + delta.Y)
+		}):Play()
+	end
+end)
+
+-- ==========================================
+-- 8. ЛОГИКА ТОЧКИ И ТЕЛЕПОРТА
+-- ==========================================
+createBtn.Activated:Connect(function()
+	local char = player.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("Head") then return end
+	
+	-- Сохраняем позицию и поворот (CFrame)
+	savedCFrame = char.HumanoidRootPart.CFrame
+	
+	-- Удаляем старый кубик, если он был
+	if waypointCube then
+		waypointCube:Destroy()
+	end
+	
+	-- Создаем визуальный кубик
+	waypointCube = Instance.new("Part")
+	waypointCube.Name = "FusionHubWaypoint"
+	waypointCube.Size = Vector3.new(1, 1, 1)
+	-- Размещаем на уровне головы
+	waypointCube.Position = char.Head.Position 
+	waypointCube.Anchored = true
+	waypointCube.CanCollide = false
+	waypointCube.Material = Enum.Material.Neon
+	-- Рандомный цвет
+	waypointCube.Color = Color3.new(math.random(), math.random(), math.random())
+	waypointCube.Parent = workspace
+	
+	-- Обновляем текст на кнопке
+	createBtn.Text = "Recreate a point"
+end)
+
+deleteBtn.Activated:Connect(function()
+	savedCFrame = nil
+	if waypointCube then
+		waypointCube:Destroy()
+		waypointCube = nil
+	end
+	createBtn.Text = "Create a point"
+end)
+
+tpBtn.Activated:Connect(function()
+	if savedCFrame then
+		local char = player.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		
+		if hrp then
+			-- Телепортируем чуть выше (+3 по оси Y), чтобы игрок не застрял в текстурах
+			hrp.CFrame = savedCFrame + Vector3.new(0, 3, 0)
+			
+			-- Визуальный отклик на кнопке
+			tpLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+			task.delay(0.5, function()
+				tpLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+			end)
+		end
+	else
+		-- Если точка не создана, даем понять пользователю (красный текст на секунду)
+		local originalText = tpLabel.Text
+		tpLabel.Text = "The point has not been created!"
+		tpLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+		
+		task.delay(1, function()
+			tpLabel.Text = originalText
+			tpLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		end)
+	end
+end)
+
+-- Очистка кубика при уничтожении интерфейса (если игрок нажмет "Отключить скрипт")
+screenGui.AncestryChanged:Connect(function(_, parent)
+	if not parent and waypointCube then
+		waypointCube:Destroy()
+	end
+end)
