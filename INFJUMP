@@ -1,0 +1,89 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+
+-- ==========================================
+-- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- ==========================================
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+-- ==========================================
+-- 2. СОЗДАНИЕ КНОПКИ INF JUMP
+-- ==========================================
+local infJumpBtn = Instance.new("TextButton")
+infJumpBtn.Name = "InfJumpToggleButton"
+infJumpBtn.Size = UDim2.new(1, -15, 0, 45)
+infJumpBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+infJumpBtn.BackgroundTransparency = 0.4
+infJumpBtn.Text = ""
+infJumpBtn.AutoButtonColor = true
+infJumpBtn.LayoutOrder = 9 -- Встает после Teleporter (у которого 8)
+infJumpBtn.Parent = scrollFrame
+
+local infJumpCorner = Instance.new("UICorner")
+infJumpCorner.CornerRadius = UDim.new(0, 8)
+infJumpCorner.Parent = infJumpBtn
+
+local infJumpLabel = Instance.new("TextLabel")
+infJumpLabel.Size = UDim2.new(1, -20, 1, 0)
+infJumpLabel.Position = UDim2.new(0, 10, 0, 0)
+infJumpLabel.BackgroundTransparency = 1
+infJumpLabel.Text = "Inf Jump: OFF"
+infJumpLabel.Font = Enum.Font.GothamMedium
+infJumpLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+infJumpLabel.TextSize = 14
+infJumpLabel.TextXAlignment = Enum.TextXAlignment.Left
+infJumpLabel.Parent = infJumpBtn
+
+-- ==========================================
+-- 3. ЛОГИКА БЕСКОНЕЧНОГО ПРЫЖКА
+-- ==========================================
+local isInfJumpEnabled = false
+local jumpConnection = nil
+
+local function toggleInfJump()
+	isInfJumpEnabled = not isInfJumpEnabled
+	
+	if isInfJumpEnabled then
+		-- Визуальное включение
+		infJumpLabel.Text = "Inf Jump: ON"
+		infJumpLabel.TextColor3 = Color3.fromRGB(150, 255, 150) -- Зеленый текст
+		infJumpBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35) -- Зеленоватый фон
+		
+		-- Логика: привязываемся к глобальному запросу прыжка
+		jumpConnection = UserInputService.JumpRequest:Connect(function()
+			local char = player.Character
+			if char then
+				local humanoid = char:FindFirstChildOfClass("Humanoid")
+				-- Если хуманоид жив, принудительно меняем его состояние на прыжок
+				if humanoid and humanoid.Health > 0 then
+					humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+				end
+			end
+		end)
+	else
+		-- Визуальное выключение
+		infJumpLabel.Text = "Inf Jump: OFF"
+		infJumpLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		infJumpBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		
+		-- Отключаем соединение
+		if jumpConnection then
+			jumpConnection:Disconnect()
+			jumpConnection = nil
+		end
+	end
+end
+
+-- Обработка нажатия на кнопку
+infJumpBtn.MouseButton1Click:Connect(toggleInfJump)
