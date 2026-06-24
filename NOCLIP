@@ -1,0 +1,100 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+-- ==========================================
+-- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- ==========================================
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+-- ==========================================
+-- 2. СОЗДАНИЕ КНОПКИ NOCLIP
+-- ==========================================
+local noclipBtn = Instance.new("TextButton")
+noclipBtn.Name = "NoClipToggleButton"
+noclipBtn.Size = UDim2.new(1, -15, 0, 45)
+noclipBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+noclipBtn.BackgroundTransparency = 0.4
+noclipBtn.Text = ""
+noclipBtn.AutoButtonColor = true
+noclipBtn.LayoutOrder = 5 -- Встает после ESP (которому задан LayoutOrder = 4)
+noclipBtn.Parent = scrollFrame
+
+local noclipCorner = Instance.new("UICorner")
+noclipCorner.CornerRadius = UDim.new(0, 8)
+noclipCorner.Parent = noclipBtn
+
+local noclipLabel = Instance.new("TextLabel")
+noclipLabel.Size = UDim2.new(1, -20, 1, 0)
+noclipLabel.Position = UDim2.new(0, 10, 0, 0)
+noclipLabel.BackgroundTransparency = 1
+noclipLabel.Text = "NoClip: OFF"
+noclipLabel.Font = Enum.Font.GothamMedium
+noclipLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+noclipLabel.TextSize = 14
+noclipLabel.TextXAlignment = Enum.TextXAlignment.Left
+noclipLabel.Parent = noclipBtn
+
+-- ==========================================
+-- 3. ЛОГИКА NOCLIP
+-- ==========================================
+local isNoClipEnabled = false
+local noclipConnection = nil
+
+local function toggleNoClip()
+	isNoClipEnabled = not isNoClipEnabled
+	
+	if isNoClipEnabled then
+		-- Визуальное включение
+		noclipLabel.Text = "NoClip: ON"
+		noclipLabel.TextColor3 = Color3.fromRGB(150, 255, 150) -- Зеленый текст
+		noclipBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35) -- Зеленоватый фон
+		
+		-- Логика: отключаем коллизию перед каждым просчетом физики (Stepped)
+		noclipConnection = RunService.Stepped:Connect(function()
+			local character = player.Character
+			if character then
+				for _, part in ipairs(character:GetDescendants()) do
+					if part:IsA("BasePart") and part.CanCollide then
+						part.CanCollide = false
+					end
+				end
+			end
+		end)
+	else
+		-- Визуальное выключение
+		noclipLabel.Text = "NoClip: OFF"
+		noclipLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		noclipBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		
+		-- Отключаем цикл
+		if noclipConnection then
+			noclipConnection:Disconnect()
+			noclipConnection = nil
+		end
+		
+		-- Движок Roblox автоматически вернет коллизию деталям в следующем кадре,
+		-- так что нам не нужно вручную возвращать CanCollide = true.
+	end
+end
+
+-- Обработка нажатия на кнопку
+noclipBtn.MouseButton1Click:Connect(toggleNoClip)
+
+-- Защита от багов при перерождении персонажа (чтобы цикл не крутился впустую)
+player.CharacterAdded:Connect(function()
+	-- Если игрок умер и возродился, а NoClip был включен - выключаем его визуально и системно
+	if isNoClipEnabled then
+		toggleNoClip() 
+	end
+end)
