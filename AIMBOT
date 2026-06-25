@@ -30,7 +30,7 @@ local aimSettings = {
 	TargetTeam = "All",
 	ShowFOV = false,
 	FOVRadius = 150,
-	WallCheck = true -- Добавлено на основе image_e9b665.png
+	WallCheck = true
 }
 
 local aimConnection = nil
@@ -100,14 +100,18 @@ settingsIcon.Image = "rbxassetid://9405931578"
 settingsIcon.Parent = settingsBtn
 
 -- ==========================================
--- 5. ВИЗУАЛИЗАЦИЯ FOV КРУГА
+-- 5. ВИЗУАЛИЗАЦИЯ FOV КРУГА (ИСПРАВЛЕНО ДЛЯ ЗУМА)
 -- ==========================================
-local fovCircle = Instance.new("Frame")
+-- Используем ImageLabel, чтобы скрипт FusionHub не делал его Active = true
+local fovCircle = Instance.new("ImageLabel")
 fovCircle.Name = "AimbotFOV"
 fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
 fovCircle.Size = UDim2.new(0, aimSettings.FOVRadius * 2, 0, aimSettings.FOVRadius * 2)
 fovCircle.BackgroundTransparency = 1
+fovCircle.ImageTransparency = 1 -- Скрываем картинку, чтобы работал только Stroke
+fovCircle.Active = false -- Гарантирует, что мышь не блокируется
+pcall(function() fovCircle.Interactable = false end)
 fovCircle.Visible = false
 fovCircle.Parent = screenGui
 
@@ -125,6 +129,7 @@ RunService.RenderStepped:Connect(function()
 	if aimSettings.ShowFOV and aimSettings.Enabled then
 		local mousePos = UserInputService:GetMouseLocation()
 		fovCircle.Position = UDim2.new(0, mousePos.X, 0, mousePos.Y)
+		fovCircle.Active = false -- Дополнительная защита от авто-фикса из MainHub
 		fovCircle.Visible = true
 	else
 		fovCircle.Visible = false
@@ -134,7 +139,6 @@ end)
 -- ==========================================
 -- 6. МЕНЮ НАСТРОЕК AIMBOT
 -- ==========================================
--- Увеличен размер меню, чтобы вместить новую кнопку Wall Check
 local aimMenu = Instance.new("CanvasGroup")
 aimMenu.Name = "AimSettingsMenu"
 aimMenu.Size = UDim2.new(0, 250, 0, 300) 
@@ -263,7 +267,6 @@ createSettingsBtn("Target Team: All", 165, function(btn)
 	end
 end)
 
--- Интеграция кнопки Wall Check из скриншота image_e9b665.png
 local wallCheckBtn = createSettingsBtn("Wall Check: ON", 205, function(btn)
 	aimSettings.WallCheck = not aimSettings.WallCheck
 	if aimSettings.WallCheck then
@@ -274,7 +277,7 @@ local wallCheckBtn = createSettingsBtn("Wall Check: ON", 205, function(btn)
 		btn.TextColor3 = Color3.fromRGB(200, 200, 205)
 	end
 end)
-wallCheckBtn.TextColor3 = Color3.fromRGB(150, 255, 150) -- Цвет по умолчанию (ON)
+wallCheckBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
 
 createSettingsBtn("Show FOV: OFF", 245, function(btn)
 	aimSettings.ShowFOV = not aimSettings.ShowFOV
@@ -337,10 +340,8 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 -- ==========================================
--- 8. ДИНАМИЧЕСКОЕ ЯДРО АИМБОТА И ФУНКЦИЯ ПРОВЕРКИ СТЕН (RAYCAST)
+-- 8. ДИНАМИЧЕСКОЕ ЯДРО АИМБОТА И ФУНКЦИЯ ПРОВЕРКИ СТЕН
 -- ==========================================
-
--- Проверка препятствий (Wall Check)
 local function isVisible(targetPart, currentCamera)
 	if not aimSettings.WallCheck then return true end
 	
@@ -351,24 +352,22 @@ local function isVisible(targetPart, currentCamera)
 	local rayDirection = targetPart.Position - rayOrigin
 
 	local rayParams = RaycastParams.new()
-	rayParams.FilterDescendantsInstances = {localChar, currentCamera} -- Игнорируем себя и камеру
+	rayParams.FilterDescendantsInstances = {localChar, currentCamera}
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 	rayParams.IgnoreWater = true
 
 	local rayResult = Workspace:Raycast(rayOrigin, rayDirection, rayParams)
 	
-	-- Если луч что-то задел, проверяем, принадлежит ли это цели
 	if rayResult then
 		if rayResult.Instance:IsDescendantOf(targetPart.Parent) then
 			return true
 		end
-		return false -- Луч врезался в стену или другой объект
+		return false
 	end
 	
 	return true
 end
 
--- Функция умного поиска части тела (исправляет невидимость кастомных скинов)
 local function getTargetPart(char)
 	if aimSettings.AimPart == "Head" then
 		return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
@@ -391,14 +390,12 @@ local function getClosestPlayer()
 			if aimSettings.TargetTeam ~= "All" and (not v.Team or v.Team.Name ~= aimSettings.TargetTeam) then continue end
 			
 			local char = v.Character
-			-- Проверяем живой ли персонаж
 			if char and char:FindFirstChildOfClass("Humanoid") and char:FindFirstChildOfClass("Humanoid").Health > 0 then
 				local targetPart = getTargetPart(char)
 				
 				if targetPart then
 					local vector, onScreen = currentCamera:WorldToViewportPoint(targetPart.Position)
 					
-					-- Если на экране и проходит проверку стен
 					if onScreen and isVisible(targetPart, currentCamera) then
 						local distance = (Vector2.new(mouseLocation.X, mouseLocation.Y) - Vector2.new(vector.X, vector.Y)).Magnitude
 						
