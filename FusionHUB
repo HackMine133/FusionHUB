@@ -342,6 +342,19 @@ scrollLayout.Padding = UDim.new(0, 8)
 scrollLayout.Parent = scrollFrame
 
 -- =====================================================================
+-- [БЛОК 11.5] АСИНХРОННАЯ ЗАГРУЗКА АДДОНОВ (БЕЗОПАСНЫЙ ВЫЗОВ)
+-- =====================================================================
+task.spawn(function()
+	local success, errorMessage = pcall(function()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/ADDONS"))()
+	end)
+	
+	if not success then
+		warn("FusionHub: Не удалось загрузить аддоны. Ошибка: " .. tostring(errorMessage))
+	end
+end)
+
+-- =====================================================================
 -- [БЛОК 12] СИСТЕМА УПРАВЛЕНИЯ ПЛАВНОЙ АНИМАЦИЕЙ
 -- =====================================================================
 local function playMenuCloseAnimation()
@@ -833,4 +846,4 @@ renderConnection = RunService.RenderStepped:Connect(function()
 	end
 end)
 
-loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/ADDONS"))()
+
