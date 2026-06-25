@@ -23,7 +23,7 @@ local scrollFrame = menuGroup:WaitForChild("ContentScroll")
 -- ==========================================
 local espSettings = {
 	Enabled = false,
-	Mode = "All", -- "All" (Все), "Team:[Имя]" (Конкретная команда), "Target" (Цель)
+	Mode = "All", -- "All" (Все), "Enemies" (Кроме своей команды), "Team:[Имя]" (Конкретная команда), "Target" (Цель)
 	TargetName = "",
 	Color = Color3.fromRGB(255, 50, 50)
 }
@@ -128,7 +128,7 @@ espMenuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 espMenuTitle.TextSize = 16
 espMenuTitle.Parent = espMenu
 
--- Кнопка переключения режимов (Все / Конкретная Команда / Цель)
+-- Кнопка переключения режимов (Все / Враги / Конкретная Команда / Цель)
 local modeBtn = Instance.new("TextButton")
 modeBtn.Size = UDim2.new(1, -20, 0, 35)
 modeBtn.Position = UDim2.new(0, 10, 0, 50)
@@ -259,9 +259,9 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
--- Улучшенная логика смены режимов: Ищем команды везде
+-- Улучшенная логика смены режимов: Ищем команды везде и добавляем "Враги"
 modeBtn.Activated:Connect(function()
-	local availableModes = {"All"}
+	local availableModes = {"All", "Enemies"} -- Добавлен режим "Враги"
 	local foundTeams = {} -- Таблица для исключения дубликатов
 	
 	-- 1. Сначала пытаемся получить из стандартного сервиса Teams
@@ -306,6 +306,9 @@ modeBtn.Activated:Connect(function()
 	if newMode == "All" then
 		modeBtn.Text = "Mode: All"
 		targetBox.Visible = false
+	elseif newMode == "Enemies" then
+		modeBtn.Text = "Mode: Enemies"
+		targetBox.Visible = false
 	elseif newMode == "Target" then
 		modeBtn.Text = "Mode: Target"
 		targetBox.Visible = true
@@ -348,6 +351,12 @@ local function updateESP()
 				-- Проверка условий фильтрации
 				if espSettings.Mode == "All" then
 					shouldHighlight = true
+					
+				elseif espSettings.Mode == "Enemies" then
+					-- Подсвечивает, если команда цели отличается от нашей (или если у нас нет команды)
+					if player.Team == nil or v.Team ~= player.Team then
+						shouldHighlight = true
+					end
 					
 				elseif string.sub(espSettings.Mode, 1, 5) == "Team:" then
 					-- Проверяем принадлежность к выбранной команде
