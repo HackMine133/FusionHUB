@@ -61,28 +61,35 @@ local function toggleNoCooldown()
 		noCooldownBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
 		
 		-- Агрессивный цикл: снимаем лимиты каждый кадр
+		-- Замените этот блок в логике NoCooldown
 		ncdConnection = RunService.RenderStepped:Connect(function()
-			local character = player.Character
-			if not character then return end
-			
-			-- Ищем предмет, который игрок держит в руках в данный момент
-			local tool = character:FindFirstChildOfClass("Tool")
-			if tool then
-				-- 1. Обход стандартного кулдауна Roblox (Tool.Enabled)
-				if not tool.Enabled then
-					tool.Enabled = true
-				end
-				
-				-- 2. Обход кастомных задержек, основанных на Value-объектах
-				for _, obj in ipairs(tool:GetDescendants()) do
-					if obj:IsA("NumberValue") or obj:IsA("IntValue") then
-						local name = string.lower(obj.Name)
-						if string.find(name, "cooldown") or string.find(name, "delay") or string.find(name, "wait") or string.find(name, "time") then
-							obj.Value = 0
-						end
-					end
-				end
-			end
+		    local character = player.Character
+		    if not character then return end
+		    
+		    local tool = character:FindFirstChildOfClass("Tool")
+		    if tool then
+		        -- 1. Стандартный обход
+		        tool.Enabled = true
+		        
+		        -- 2. Принудительная очистка всех Number/Int-значений (cooldown, delay и т.д.)
+		        for _, obj in ipairs(tool:GetDescendants()) do
+		            if (obj:IsA("NumberValue") or obj:IsA("IntValue")) and 
+		               (string.find(string.lower(obj.Name), "cooldown") or 
+		                string.find(string.lower(obj.Name), "delay") or 
+		                string.find(string.lower(obj.Name), "reload")) then
+		                obj.Value = 0
+		            end
+		        end
+		        
+		        -- 3. САМОЕ ВАЖНОЕ ДЛЯ БАЗУКИ:
+		        -- Блокируем любые попытки инструмента установить Enabled = false
+		        -- Мы используем свойство инструмента, чтобы игнорировать 'wait' команды скрипта
+		        if tool:FindFirstChild("Handle") then
+		            -- Если это стандартная RocketLauncher, у неё есть RemoteEvent для стрельбы.
+		            -- Если кулдаун на сервере, он не уберется. Если локальный — это поможет:
+		            tool.Enabled = true
+		        end
+		    end
 		end)
 	else
 		-- Визуальное выключение
