@@ -1,0 +1,111 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+-- ==========================================
+-- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- ==========================================
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+-- ==========================================
+-- 2. СОЗДАНИЕ КНОПКИ NO COOLDOWN
+-- ==========================================
+local noCooldownBtn = Instance.new("TextButton")
+noCooldownBtn.Name = "NoCooldownToggleButton"
+noCooldownBtn.Size = UDim2.new(1, -15, 0, 45)
+noCooldownBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+noCooldownBtn.BackgroundTransparency = 0.4
+noCooldownBtn.Text = ""
+noCooldownBtn.AutoButtonColor = true
+noCooldownBtn.LayoutOrder = 7 -- Встает после Fly
+noCooldownBtn.Parent = scrollFrame
+
+local ncdCorner = Instance.new("UICorner")
+ncdCorner.CornerRadius = UDim.new(0, 8)
+ncdCorner.Parent = noCooldownBtn
+
+local ncdLabel = Instance.new("TextLabel")
+ncdLabel.Size = UDim2.new(1, -20, 1, 0)
+ncdLabel.Position = UDim2.new(0, 10, 0, 0)
+ncdLabel.BackgroundTransparency = 1
+ncdLabel.Text = "No Cooldown: OFF"
+ncdLabel.Font = Enum.Font.GothamMedium
+ncdLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+ncdLabel.TextSize = 14
+ncdLabel.TextXAlignment = Enum.TextXAlignment.Left
+ncdLabel.Parent = noCooldownBtn
+
+-- ==========================================
+-- 3. ЛОГИКА ОБХОДА ЗАДЕРЖКИ
+-- ==========================================
+local isNoCooldownEnabled = false
+local ncdConnection = nil
+
+local function toggleNoCooldown()
+	isNoCooldownEnabled = not isNoCooldownEnabled
+	
+	if isNoCooldownEnabled then
+		-- Визуальное включение
+		ncdLabel.Text = "No Cooldown: ON"
+		ncdLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+		noCooldownBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+		
+		-- Агрессивный цикл: снимаем лимиты каждый кадр
+		ncdConnection = RunService.RenderStepped:Connect(function()
+			local character = player.Character
+			if not character then return end
+			
+			-- Ищем предмет, который игрок держит в руках в данный момент
+			local tool = character:FindFirstChildOfClass("Tool")
+			if tool then
+				-- 1. Обход стандартного кулдауна Roblox (Tool.Enabled)
+				if not tool.Enabled then
+					tool.Enabled = true
+				end
+				
+				-- 2. Обход кастомных задержек, основанных на Value-объектах
+				for _, obj in ipairs(tool:GetDescendants()) do
+					if obj:IsA("NumberValue") or obj:IsA("IntValue") then
+						local name = string.lower(obj.Name)
+						if string.find(name, "cooldown") or string.find(name, "delay") or string.find(name, "wait") or string.find(name, "time") then
+							obj.Value = 0
+						end
+					end
+				end
+			end
+		end)
+	else
+		-- Визуальное выключение
+		ncdLabel.Text = "No Cooldown: OFF"
+		ncdLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		noCooldownBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		
+		-- Отключаем цикл
+		if ncdConnection then
+			ncdConnection:Disconnect()
+			ncdConnection = nil
+		end
+	end
+end
+
+noCooldownBtn.MouseButton1Click:Connect(toggleNoCooldown)
+
+-- Если игрок респавнится, состояние сохраняется
+player.CharacterAdded:Connect(function()
+	if isNoCooldownEnabled then
+		-- Перезапускаем визуал и логику, чтобы избежать мертвых циклов
+		toggleNoCooldown() 
+		task.wait(0.1)
+		toggleNoCooldown()
+	end
+end)
