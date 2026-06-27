@@ -18,7 +18,7 @@ local menuGroup = screenGui:WaitForChild("MainMenu")
 local scrollFrame = menuGroup:WaitForChild("ContentScroll")
 
 -- ==========================================
--- 2. СОЗДАНИЕ КНОПКИ WALK FLING
+-- 2. СОЗДАНИЕ КНОПКИ WALKFLING
 -- ==========================================
 local flingBtn = Instance.new("TextButton")
 flingBtn.Name = "WalkFlingToggleButton"
@@ -27,7 +27,7 @@ flingBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 flingBtn.BackgroundTransparency = 0.4
 flingBtn.Text = ""
 flingBtn.AutoButtonColor = true
-flingBtn.LayoutOrder = 7
+flingBtn.LayoutOrder = 7 -- Встает после Fly (у которого 6)
 flingBtn.Parent = scrollFrame
 
 local flingCorner = Instance.new("UICorner")
@@ -38,7 +38,7 @@ local flingLabel = Instance.new("TextLabel")
 flingLabel.Size = UDim2.new(1, -20, 1, 0)
 flingLabel.Position = UDim2.new(0, 10, 0, 0)
 flingLabel.BackgroundTransparency = 1
-flingLabel.Text = "Walk Fling: OFF"
+flingLabel.Text = "WalkFling: OFF"
 flingLabel.Font = Enum.Font.GothamMedium
 flingLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
 flingLabel.TextSize = 14
@@ -46,104 +46,81 @@ flingLabel.TextXAlignment = Enum.TextXAlignment.Left
 flingLabel.Parent = flingBtn
 
 -- ==========================================
--- 3. УМНАЯ ЛОГИКА ВОЛК ФЛИНГА
+-- 3. ЛОГИКА WALKFLING
 -- ==========================================
 local isFlingEnabled = false
-local flingConnection = nil
+
+local function getRoot(character)
+	return character and (character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso"))
+end
 
 local function toggleFling()
 	isFlingEnabled = not isFlingEnabled
 	
 	if isFlingEnabled then
 		-- Визуальное включение
-		flingLabel.Text = "Walk Fling: ON"
-		flingLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
-		flingBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+		flingLabel.Text = "WalkFling: ON"
+		flingLabel.TextColor3 = Color3.fromRGB(150, 255, 150) -- Зеленый текст
+		flingBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35) -- Зеленоватый фон
 		
-		flingConnection = RunService.Stepped:Connect(function()
-			local char = player.Character
-			if not char then return end
-			
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			local humanoid = char:FindFirstChildOfClass("Humanoid")
-			
-			if hrp and humanoid and humanoid.Health > 0 then
-				
-				-- 1. ЗАЩИТА: Делаем персонажа сверхтяжелым, чтобы отдача не работала на нас
-				for _, part in ipairs(char:GetChildren()) do
-					if part:IsA("BasePart") then
-						-- Плотность 100 (максимум), трение 0, упругость 0
-						part.CustomPhysicalProperties = PhysicalProperties.new(100, 0, 0, 0, 0)
-					end
-				end
-				
-				-- 2. ЗАЩИТА ОТ УЛЕТА: Срезаем внезапные скачки вверх
-				if hrp.AssemblyLinearVelocity.Y > 50 then
-					hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z)
-				end
-
-				-- 3. ПОИСК ЖЕРТВЫ (Радиус 4 стада)
-				local targetFound = false
-				
-				for _, otherPlayer in ipairs(Players:GetPlayers()) do
-					if otherPlayer ~= player and otherPlayer.Character and otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
-						local otherHrp = otherPlayer.Character.HumanoidRootPart
-						local dist = (hrp.Position - otherHrp.Position).Magnitude
-						
-						-- Если игрок подошел вплотную
-						if dist < 4 then
-							targetFound = true
-							
-							-- Проходим сквозь жертву для максимального урона
-							for _, otherPart in ipairs(otherPlayer.Character:GetDescendants()) do
-								if otherPart:IsA("BasePart") and otherPart.CanCollide then
-									otherPart.CanCollide = false
-								end
-							end
+		-- Запуск встроенного Noclip, чтобы не улетать от столкновений
+		task.spawn(function()
+			while isFlingEnabled do
+				RunService.Stepped:Wait()
+				if player.Character then
+					for _, v in pairs(player.Character:GetDescendants()) do
+						if v:IsA("BasePart") then
+							v.CanCollide = false
 						end
 					end
 				end
+			end
+		end)
+
+		-- Основной цикл WalkFling
+		task.spawn(function()
+			local movel = 0.1
+			while isFlingEnabled do
+				RunService.Heartbeat:Wait()
 				
-				-- 4. АКТИВАЦИЯ: Крутимся ТОЛЬКО если враг рядом
-				if targetFound then
-					hrp.AssemblyAngularVelocity = Vector3.new(0, 50000, 0)
-				else
-					-- Сбрасываем вращение, ходим абсолютно нормально
-					hrp.AssemblyAngularVelocity = Vector3.zero
+				local character = player.Character
+				local root = getRoot(character)
+				
+				if character and character.Parent and root and root.Parent then
+					local vel = root.Velocity
+					
+					-- Резкий импульс для флинга
+					root.Velocity = vel * 10000 + Vector3.new(0, 10000, 0)
+					
+					RunService.RenderStepped:Wait()
+					if character and character.Parent and root and root.Parent then
+						root.Velocity = vel
+					end
+					
+					RunService.Stepped:Wait()
+					if character and character.Parent and root and root.Parent then
+						root.Velocity = vel + Vector3.new(0, movel, 0)
+						movel = movel * -1
+					end
 				end
 			end
 		end)
 	else
 		-- Визуальное выключение
-		flingLabel.Text = "Walk Fling: OFF"
+		flingLabel.Text = "WalkFling: OFF"
 		flingLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
 		flingBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 		
-		if flingConnection then
-			flingConnection:Disconnect()
-			flingConnection = nil
-		end
-		
-		-- Возвращаем нормальную физику и останавливаемся
-		local char = player.Character
-		if char then
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				hrp.AssemblyAngularVelocity = Vector3.zero
-			end
-			for _, part in ipairs(char:GetChildren()) do
-				if part:IsA("BasePart") then
-					part.CustomPhysicalProperties = PhysicalProperties.new(0.7, 0.3, 0.5) -- Дефолтные значения Роблокса
-				end
-			end
-		end
+		-- Циклы остановятся сами благодаря проверке isFlingEnabled в while
 	end
 end
 
-flingBtn.MouseButton1Click:Connect(toggleFling)
+-- Обработка нажатия на кнопку
+flingBtn.Activated:Connect(toggleFling)
 
--- Авто-выключение при перерождении
+-- Защита при перерождении персонажа
 player.CharacterAdded:Connect(function()
+	-- Выключаем системно и визуально, если игрок умер с включенным флингом
 	if isFlingEnabled then
 		toggleFling() 
 	end
