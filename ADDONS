@@ -8,3 +8,4 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB
 loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/WALKFLING"))()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/TPPLAYER"))()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/NOCOOLDOWN"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/FLASHBACK"))()
