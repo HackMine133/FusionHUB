@@ -1,0 +1,294 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+
+-- ==========================================
+-- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- ==========================================
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+-- ==========================================
+-- 2. СОЗДАНИЕ КНОПКИ В МЕНЮ
+-- ==========================================
+local jerkBtn = Instance.new("TextButton")
+jerkBtn.Name = "JerkButton"
+jerkBtn.Size = UDim2.new(1, -15, 0, 45)
+jerkBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+jerkBtn.BackgroundTransparency = 0.4
+jerkBtn.Text = ""
+jerkBtn.AutoButtonColor = true
+jerkBtn.LayoutOrder = 7 -- Встает после остальных аддонов
+jerkBtn.Parent = scrollFrame
+
+local jerkCorner = Instance.new("UICorner")
+jerkCorner.CornerRadius = UDim.new(0, 8)
+jerkCorner.Parent = jerkBtn
+
+local jerkLabel = Instance.new("TextLabel")
+jerkLabel.Size = UDim2.new(1, -20, 1, 0)
+jerkLabel.Position = UDim2.new(0, 10, 0, 0)
+jerkLabel.BackgroundTransparency = 1
+jerkLabel.Text = "Secret Tool"
+jerkLabel.Font = Enum.Font.GothamMedium
+jerkLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+jerkLabel.TextSize = 14
+jerkLabel.TextXAlignment = Enum.TextXAlignment.Left
+jerkLabel.Parent = jerkBtn
+
+local lockIcon = Instance.new("ImageLabel")
+lockIcon.Size = UDim2.new(0, 20, 0, 20)
+lockIcon.Position = UDim2.new(1, -30, 0.5, -10)
+lockIcon.BackgroundTransparency = 1
+lockIcon.Image = "rbxassetid://3926305904"
+lockIcon.ImageRectOffset = Vector2.new(164, 404)
+lockIcon.ImageRectSize = Vector2.new(36, 36)
+lockIcon.Parent = jerkBtn
+
+-- ==========================================
+-- 3. СОЗДАНИЕ МЕНЮ ПАРОЛЯ (ПЛАВАЮЩЕЕ)
+-- ==========================================
+local passMenu = Instance.new("CanvasGroup")
+passMenu.Name = "PasswordMenu"
+passMenu.Size = UDim2.new(0, 250, 0, 160)
+passMenu.Position = UDim2.new(0.5, -125, 0.5, -80)
+passMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+passMenu.BackgroundTransparency = 0.1
+passMenu.GroupTransparency = 1
+passMenu.Visible = false
+passMenu.Parent = screenGui
+
+local passMenuCorner = Instance.new("UICorner")
+passMenuCorner.CornerRadius = UDim.new(0, 12)
+passMenuCorner.Parent = passMenu
+
+local passMenuStroke = Instance.new("UIStroke")
+passMenuStroke.Color = Color3.fromRGB(255, 255, 255)
+passMenuStroke.Transparency = 0.8
+passMenuStroke.Thickness = 1
+passMenuStroke.Parent = passMenu
+
+local passMenuTitle = Instance.new("TextLabel")
+passMenuTitle.Size = UDim2.new(1, 0, 0, 30)
+passMenuTitle.Position = UDim2.new(0, 0, 0, 10)
+passMenuTitle.BackgroundTransparency = 1
+passMenuTitle.Text = "Access Required"
+passMenuTitle.Font = Enum.Font.GothamBold
+passMenuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+passMenuTitle.TextSize = 16
+passMenuTitle.Parent = passMenu
+
+local closePassBtn = Instance.new("TextButton")
+closePassBtn.Size = UDim2.new(0, 30, 0, 30)
+closePassBtn.Position = UDim2.new(1, -35, 0, 10)
+closePassBtn.BackgroundTransparency = 1
+closePassBtn.Text = "X"
+closePassBtn.Font = Enum.Font.GothamBold
+closePassBtn.TextColor3 = Color3.fromRGB(200, 100, 100)
+closePassBtn.TextSize = 16
+closePassBtn.Parent = passMenu
+
+local passwordBox = Instance.new("TextBox")
+passwordBox.Size = UDim2.new(1, -20, 0, 35)
+passwordBox.Position = UDim2.new(0, 10, 0, 50)
+passwordBox.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+passwordBox.PlaceholderText = "Enter password..."
+passwordBox.Text = ""
+passwordBox.Font = Enum.Font.Gotham
+passwordBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+passwordBox.TextSize = 13
+passwordBox.ClearTextOnFocus = false
+passwordBox.Parent = passMenu
+
+local passCorner = Instance.new("UICorner")
+passCorner.CornerRadius = UDim.new(0, 6)
+passCorner.Parent = passwordBox
+
+local passStroke = Instance.new("UIStroke")
+passStroke.Color = Color3.fromRGB(100, 100, 110)
+passStroke.Parent = passwordBox
+
+local checkBtn = Instance.new("TextButton")
+checkBtn.Size = UDim2.new(1, -20, 0, 35)
+checkBtn.Position = UDim2.new(0, 10, 0, 105)
+checkBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+checkBtn.Text = "Check"
+checkBtn.Font = Enum.Font.GothamBold
+checkBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
+checkBtn.TextSize = 14
+checkBtn.AutoButtonColor = true
+checkBtn.Parent = passMenu
+
+local checkCorner = Instance.new("UICorner")
+checkCorner.CornerRadius = UDim.new(0, 6)
+checkCorner.Parent = checkBtn
+
+-- ==========================================
+-- 4. ЛОГИКА И АНИМАЦИИ МЕНЮ ПАРОЛЯ
+-- ==========================================
+local isPassOpen = false
+
+local function togglePassMenu()
+	isPassOpen = not isPassOpen
+	if isPassOpen then
+		passMenu.Visible = true
+		passwordBox.Text = ""
+		passwordBox.PlaceholderText = "Enter password..."
+		TweenService:Create(passMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+			GroupTransparency = 0
+		}):Play()
+	else
+		local closeTween = TweenService:Create(passMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
+			GroupTransparency = 1
+		})
+		closeTween:Play()
+		closeTween.Completed:Wait()
+		if not isPassOpen then
+			passMenu.Visible = false
+		end
+	end
+end
+
+jerkBtn.Activated:Connect(function()
+	if not isPassOpen then
+		togglePassMenu()
+	end
+end)
+
+closePassBtn.Activated:Connect(function()
+	if isPassOpen then
+		togglePassMenu()
+	end
+end)
+
+-- Система перетаскивания (Drag)
+local draggingPass, dragInputPass, dragStartPass, startPosPass
+passMenu.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingPass = true
+		dragStartPass = input.Position
+		startPosPass = passMenu.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then draggingPass = false end
+		end)
+	end
+end)
+
+passMenu.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInputPass = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInputPass and draggingPass then
+		local delta = input.Position - dragStartPass
+		TweenService:Create(passMenu, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+			Position = UDim2.new(startPosPass.X.Scale, startPosPass.X.Offset + delta.X, startPosPass.Y.Scale, startPosPass.Y.Offset + delta.Y)
+		}):Play()
+	end
+end)
+
+-- ==========================================
+-- 5. ФУНКЦИОНАЛ ИНСТРУМЕНТА (JERK)
+-- ==========================================
+local function giveJerkTool()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+	local backpack = player:FindFirstChildWhichIsA("Backpack")
+	
+	if not humanoid or not backpack then return end
+
+	-- Проверяем, нет ли уже такого тула
+	if backpack:FindFirstChild("Jerk Off") or character:FindFirstChild("Jerk Off") then
+		return
+	end
+
+	local tool = Instance.new("Tool")
+	tool.Name = "Jerk Off"
+	tool.ToolTip = "in the stripped club. straight up \"jorking it\" . and by \"it\" , haha, well. let's justr say. My peanits."
+	tool.RequiresHandle = false
+	tool.Parent = backpack
+
+	local jorkin = false
+	local track = nil
+
+	local function stopTomfoolery()
+		jorkin = false
+		if track then
+			track:Stop()
+			track = nil
+		end
+	end
+
+	tool.Equipped:Connect(function() jorkin = true end)
+	tool.Unequipped:Connect(stopTomfoolery)
+	humanoid.Died:Connect(stopTomfoolery)
+
+	-- Запускаем цикл в отдельном потоке, чтобы не заморозить UI
+	task.spawn(function()
+		while tool.Parent do
+			task.wait()
+			if not jorkin then continue end
+
+			local isR15 = humanoid.RigType == Enum.HumanoidRigType.R15
+			if not track then
+				local anim = Instance.new("Animation")
+				anim.AnimationId = not isR15 and "rbxassetid://72042024" or "rbxassetid://698251653"
+				track = humanoid:LoadAnimation(anim)
+			end
+
+			track:Play()
+			track:AdjustSpeed(isR15 and 0.7 or 0.65)
+			track.TimePosition = 0.6
+			task.wait(0.1)
+			
+			while track and track.TimePosition < (not isR15 and 0.65 or 0.7) and jorkin do 
+				task.wait(0.1) 
+			end
+			
+			if track then
+				track:Stop()
+				track = nil
+			end
+		end
+	end)
+end
+
+-- ==========================================
+-- 6. ПРОВЕРКА ПАРОЛЯ
+-- ==========================================
+checkBtn.Activated:Connect(function()
+	local inputPass = string.lower(passwordBox.Text)
+	
+	if inputPass == "fh" then
+		togglePassMenu()
+		giveJerkTool()
+	else
+		passwordBox.Text = ""
+		passwordBox.PlaceholderText = "Wrong Password!"
+		passwordBox.PlaceholderColor3 = Color3.fromRGB(200, 100, 100)
+		
+		-- Тряска окна при неверном пароле
+		local originPos = passMenu.Position
+		TweenService:Create(passMenu, TweenInfo.new(0.05, Enum.EasingStyle.Bounce, Enum.EasingDirection.InOut, 3, true), {
+			Position = originPos + UDim2.new(0, 10, 0, 0)
+		}):Play()
+		
+		task.delay(1.5, function()
+			passwordBox.PlaceholderText = "Enter password..."
+			passwordBox.PlaceholderColor3 = Color3.fromRGB(178, 178, 178)
+		end)
+	end
+end)
