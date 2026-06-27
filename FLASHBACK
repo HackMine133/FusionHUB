@@ -1,0 +1,125 @@
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+
+-- ==========================================
+-- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- ==========================================
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+-- ==========================================
+-- 2. ЛОГИКА ОТСЛЕЖИВАНИЯ СМЕРТИ (FLASHBACK)
+-- ==========================================
+local lastDeathCFrame = nil
+
+local function getRoot(char)
+	return char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso"))
+end
+
+local function setupDeathTracker(character)
+	local humanoid = character:WaitForChild("Humanoid", 5)
+	if humanoid then
+		humanoid.Died:Connect(function()
+			local root = getRoot(character)
+			if root then
+				lastDeathCFrame = root.CFrame
+			end
+		end)
+	end
+end
+
+-- Подключаем трекер к текущему и будущим персонажам
+if player.Character then
+	setupDeathTracker(player.Character)
+end
+player.CharacterAdded:Connect(setupDeathTracker)
+
+-- ==========================================
+-- 3. СОЗДАНИЕ КНОПКИ FLASHBACK
+-- ==========================================
+local flashbackBtn = Instance.new("TextButton")
+flashbackBtn.Name = "FlashbackButton"
+flashbackBtn.Size = UDim2.new(1, -15, 0, 45)
+flashbackBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+flashbackBtn.BackgroundTransparency = 0.4
+flashbackBtn.Text = ""
+flashbackBtn.AutoButtonColor = true
+flashbackBtn.LayoutOrder = 7 -- Встает после Fly (у которого 6)
+flashbackBtn.Parent = scrollFrame
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 8)
+btnCorner.Parent = flashbackBtn
+
+local btnLabel = Instance.new("TextLabel")
+btnLabel.Size = UDim2.new(1, -20, 1, 0)
+btnLabel.Position = UDim2.new(0, 10, 0, 0)
+btnLabel.BackgroundTransparency = 1
+btnLabel.Text = "Flashback (Death TP)"
+btnLabel.Font = Enum.Font.GothamMedium
+btnLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+btnLabel.TextSize = 14
+btnLabel.TextXAlignment = Enum.TextXAlignment.Left
+btnLabel.Parent = flashbackBtn
+
+-- ==========================================
+-- 4. ОБРАБОТКА НАЖАТИЯ И ТЕЛЕПОРТАЦИИ
+-- ==========================================
+local isTeleporting = false
+
+flashbackBtn.Activated:Connect(function()
+	if isTeleporting then return end
+	
+	if not lastDeathCFrame then
+		-- Визуальное уведомление об ошибке прямо на кнопке
+		local oldText = btnLabel.Text
+		local oldColor = btnLabel.TextColor3
+		
+		btnLabel.Text = "No previous death location!"
+		btnLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+		
+		task.delay(1.5, function()
+			btnLabel.Text = oldText
+			btnLabel.TextColor3 = oldColor
+		end)
+		return
+	end
+
+	local char = player.Character
+	local root = getRoot(char)
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+	if char and root and humanoid then
+		isTeleporting = true
+		
+		-- Если игрок сидит, заставляем его встать перед телепортом (как в Infinite Yield)
+		if humanoid.SeatPart then
+			humanoid.Sit = false
+			task.wait(0.1)
+		end
+		
+		root.CFrame = lastDeathCFrame
+		
+		-- Визуальный отклик об успешном телепорте
+		local oldText = btnLabel.Text
+		local oldColor = btnLabel.TextColor3
+		
+		btnLabel.Text = "Teleported!"
+		btnLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+		
+		task.delay(1, function()
+			btnLabel.Text = oldText
+			btnLabel.TextColor3 = oldColor
+			isTeleporting = false
+		end)
+	end
+end)
