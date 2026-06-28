@@ -164,7 +164,7 @@ saveBtn.Parent = tpMenu
 Instance.new("UICorner", saveBtn).CornerRadius = UDim.new(0, 6)
 
 -- ==========================================
--- 7. ЛОГИКА СПИСКА ИГРОКОВ
+-- 7. ЛОГИКА СПИСКА ИГРОКОВ (ОБНОВЛЕНО)
 -- ==========================================
 local function refreshPlayerList()
 	-- Очищаем старый список
@@ -178,59 +178,122 @@ local function refreshPlayerList()
 	for _, p in pairs(Players:GetPlayers()) do
 		if p ~= player then -- Исключаем самих себя
 			local btn = Instance.new("TextButton")
-			btn.Size = UDim2.new(1, -10, 0, 30)
-			btn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+			btn.Size = UDim2.new(1, -10, 0, 36) -- Сделал чуть выше для аватарок
+			
+			-- Смешиваем цвет команды с темным фоном хаба для читаемости текста
+			local baseBg = Color3.fromRGB(30, 30, 35)
+			local teamBg = p.Team and p.TeamColor.Color or baseBg
+			btn.BackgroundColor3 = baseBg:Lerp(teamBg, 0.3) -- 30% интенсивности цвета команды
+			
 			btn.Text = p.DisplayName .. " (@" .. p.Name .. ")"
 			btn.Font = Enum.Font.Gotham
 			btn.TextColor3 = Color3.fromRGB(200, 200, 205)
 			btn.TextSize = 13
+			btn.TextXAlignment = Enum.TextXAlignment.Left
 			btn.Parent = playerScroll
 			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 			
-			-- Выделяем, если он уже был выбран
+			-- Отступы для текста, чтобы он не наезжал на аватарку
+			local padding = Instance.new("UIPadding")
+			padding.PaddingLeft = UDim.new(0, 40)
+			padding.Parent = btn
+			
+			-- Аватарка игрока
+			local avatar = Instance.new("ImageLabel")
+			avatar.Size = UDim2.new(0, 26, 0, 26)
+			avatar.Position = UDim2.new(0, -32, 0.5, -13)
+			avatar.BackgroundTransparency = 1
+			avatar.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+			
+			-- Загружаем миниатюру лица (может слегка задержаться, поэтому обернуто в pcall)
+			pcall(function()
+				avatar.Image = Players:GetUserThumbnailAsync(p.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+			end)
+			avatar.Parent = btn
+			Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
+			
+			-- Выделяем, если он уже был выбран (теперь через стильную обводку)
 			if selectedPlayerName == p.Name then
-				btn.BackgroundColor3 = Color3.fromRGB(50, 70, 50)
-				btn.TextColor3 = Color3.fromRGB(150, 255, 150)
+				local highlight = Instance.new("UIStroke")
+				highlight.Color = Color3.fromRGB(150, 255, 150)
+				highlight.Thickness = 1.5
+				highlight.Parent = btn
+				btn.TextColor3 = Color3.fromRGB(255, 255, 255)
 			end
 			
 			-- Обработка клика по игроку в списке
 			btn.Activated:Connect(function()
 				selectedPlayerName = p.Name
 				tpLabel.Text = "Teleport to: " .. p.DisplayName
-				refreshPlayerList() -- Перерисовываем список, чтобы подсветить выбранного
+				refreshPlayerList() -- Перерисовываем список
 			end)
 		end
 	end
+	
+	-- Добавление кнопки RANDOM в самый конец списка
+	local randomBtn = Instance.new("TextButton")
+	randomBtn.Size = UDim2.new(1, -10, 0, 36)
+	randomBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+	randomBtn.Text = "🎲 RANDOM PLAYER"
+	randomBtn.Font = Enum.Font.GothamBold
+	randomBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
+	randomBtn.TextSize = 13
+	randomBtn.LayoutOrder = 9999 -- Принудительно спускаем в самый низ
+	randomBtn.Parent = playerScroll
+	Instance.new("UICorner", randomBtn).CornerRadius = UDim.new(0, 6)
+	
+	if selectedPlayerName == "RANDOM" then
+		local highlight = Instance.new("UIStroke")
+		highlight.Color = Color3.fromRGB(255, 215, 0)
+		highlight.Thickness = 1.5
+		highlight.Parent = randomBtn
+	end
+	
+	randomBtn.Activated:Connect(function()
+		selectedPlayerName = "RANDOM"
+		tpLabel.Text = "Teleport to: RANDOM"
+		refreshPlayerList()
+	end)
 end
 
 refreshBtn.Activated:Connect(refreshPlayerList)
 
 -- ==========================================
--- 8. ЛОГИКА МЕНЮ И АНИМАЦИИ
+-- 8. ЛОГИКА МЕНЮ И АНИМАЦИИ (ПОЧИНЕН БАГ С ЗАВИСАНИЕМ)
 -- ==========================================
 local isSettingsOpen = false
+local currentTween = nil -- Храним текущую анимацию для возможности её отмены
 
 local function closeTpMenu()
 	if not isSettingsOpen then return end
 	isSettingsOpen = false
-	local closeTween = TweenService:Create(tpMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
+	
+	if currentTween then currentTween:Cancel() end
+	
+	currentTween = TweenService:Create(tpMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
 		GroupTransparency = 1
 	})
-	closeTween:Play()
-	closeTween.Completed:Wait()
-	if not isSettingsOpen then
-		tpMenu.Visible = false
-	end
+	currentTween:Play()
+	
+	-- Использование task.delay вместо Completed:Wait() предотвращает зависание скрипта
+	task.delay(0.2, function()
+		if not isSettingsOpen then
+			tpMenu.Visible = false
+		end
+	end)
 end
 
 settingsBtn.Activated:Connect(function()
 	isSettingsOpen = not isSettingsOpen
+	if currentTween then currentTween:Cancel() end
+	
 	if isSettingsOpen then
 		refreshPlayerList() -- Обновляем список перед открытием
 		tpMenu.Visible = true
-		TweenService:Create(tpMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
+		currentTween = TweenService:Create(tpMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
 			GroupTransparency = 0
-		}):Play()
+		})
+		currentTween:Play()
 	else
 		closeTpMenu()
 	end
@@ -267,7 +330,7 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 -- ==========================================
--- 9. ЛОГИКА ТЕЛЕПОРТАЦИИ
+-- 9. ЛОГИКА ТЕЛЕПОРТАЦИИ (С ПОДДЕРЖКОЙ RANDOM)
 -- ==========================================
 tpBtn.Activated:Connect(function()
 	if not selectedPlayerName then
@@ -281,7 +344,25 @@ tpBtn.Activated:Connect(function()
 		return
 	end
 	
-	local targetPlayer = Players:FindFirstChild(selectedPlayerName)
+	local targetPlayer = nil
+	
+	-- Логика обработки случайного игрока
+	if selectedPlayerName == "RANDOM" then
+		local validPlayers = {}
+		for _, p in pairs(Players:GetPlayers()) do
+			if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+				table.insert(validPlayers, p)
+			end
+		end
+		
+		if #validPlayers > 0 then
+			targetPlayer = validPlayers[math.random(1, #validPlayers)]
+		end
+	else
+		targetPlayer = Players:FindFirstChild(selectedPlayerName)
+	end
+
+	-- Проверка и телепортация
 	if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
 		local myChar = player.Character
 		if myChar and myChar:FindFirstChild("HumanoidRootPart") then
@@ -297,7 +378,7 @@ tpBtn.Activated:Connect(function()
 			end)
 		end
 	else
-		warn("Игрок мертв, вышел или не загрузился.")
+		warn("Игрок мертв, вышел, не загрузился или сервер пуст.")
 		local oldColor = tpLabel.TextColor3
 		tpLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
 		tpLabel.Text = "Target Unavailable!"
