@@ -89,37 +89,11 @@ settingsIcon.Image = "rbxassetid://9405931578" -- Иконка шестерен�
 settingsIcon.Parent = settingsBtn
 
 -- ==========================================
--- 6. МЕНЮ НАСТРОЕК (ПЛАВАЮЩЕЕ)
+-- 6. МЕНЮ НАСТРОЕК (ЧЕРЕЗ API FUSIONHUB)
 -- ==========================================
-local wpMenu = Instance.new("CanvasGroup")
-wpMenu.Name = "WaypointSettingsMenu"
-wpMenu.Size = UDim2.new(0, 250, 0, 145)
-wpMenu.Position = UDim2.new(0.5, 100, 0.5, 120) -- Появляется правее
-wpMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-wpMenu.BackgroundTransparency = 0.1
-wpMenu.GroupTransparency = 1
-wpMenu.Visible = false
-wpMenu.Parent = screenGui
-
-local wpMenuCorner = Instance.new("UICorner")
-wpMenuCorner.CornerRadius = UDim.new(0, 12)
-wpMenuCorner.Parent = wpMenu
-
-local wpMenuStroke = Instance.new("UIStroke")
-wpMenuStroke.Color = Color3.fromRGB(255, 255, 255)
-wpMenuStroke.Transparency = 0.8
-wpMenuStroke.Thickness = 1
-wpMenuStroke.Parent = wpMenu
-
-local wpMenuTitle = Instance.new("TextLabel")
-wpMenuTitle.Size = UDim2.new(1, 0, 0, 30)
-wpMenuTitle.Position = UDim2.new(0, 0, 0, 10)
-wpMenuTitle.BackgroundTransparency = 1
-wpMenuTitle.Text = "Point Settings"
-wpMenuTitle.Font = Enum.Font.GothamBold
-wpMenuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-wpMenuTitle.TextSize = 16
-wpMenuTitle.Parent = wpMenu
+-- Создаем окно через встроенную функцию хаба
+local settingsAPI = _G.FusionHub.CreateAddonSettings("Point Settings", 250, 145)
+local wpMenu = settingsAPI.Window
 
 -- Кнопка создания/обновления точки
 local createBtn = Instance.new("TextButton")
@@ -151,60 +125,11 @@ local deleteCorner = Instance.new("UICorner")
 deleteCorner.CornerRadius = UDim.new(0, 6)
 deleteCorner.Parent = deleteBtn
 
--- ==========================================
--- 7. ЛОГИКА И АНИМАЦИИ МЕНЮ НАСТРОЕК
--- ==========================================
-local isSettingsOpen = false
-
-settingsBtn.Activated:Connect(function()
-	isSettingsOpen = not isSettingsOpen
-	if isSettingsOpen then
-		wpMenu.Visible = true
-		TweenService:Create(wpMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
-			GroupTransparency = 0
-		}):Play()
-	else
-		local closeTween = TweenService:Create(wpMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
-			GroupTransparency = 1
-		})
-		closeTween:Play()
-		closeTween.Completed:Wait()
-		if not isSettingsOpen then
-			wpMenu.Visible = false
-		end
-	end
-end)
-
--- Система перетаскивания (Drag)
-local draggingWp, dragInputWp, dragStartWp, startPosWp
-wpMenu.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		draggingWp = true
-		dragStartWp = input.Position
-		startPosWp = wpMenu.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then draggingWp = false end
-		end)
-	end
-end)
-
-wpMenu.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInputWp = input
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInputWp and draggingWp then
-		local delta = input.Position - dragStartWp
-		TweenService:Create(wpMenu, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-			Position = UDim2.new(startPosWp.X.Scale, startPosWp.X.Offset + delta.X, startPosWp.Y.Scale, startPosWp.Y.Offset + delta.Y)
-		}):Play()
-	end
-end)
+-- Привязываем функцию открытия/закрытия к кнопке шестеренки
+settingsBtn.Activated:Connect(settingsAPI.ToggleFunction)
 
 -- ==========================================
--- 8. ЛОГИКА ТОЧКИ И ТЕЛЕПОРТА
+-- 7. ЛОГИКА ТОЧКИ И ТЕЛЕПОРТА
 -- ==========================================
 createBtn.Activated:Connect(function()
 	local char = player.Character
