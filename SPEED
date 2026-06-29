@@ -1,7 +1,5 @@
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 
@@ -19,15 +17,21 @@ end
 local menuGroup = screenGui:WaitForChild("MainMenu")
 local scrollFrame = menuGroup:WaitForChild("ContentScroll")
 
+-- Проверка наличия глобального API FusionHub
+if not _G.FusionHub or not _G.FusionHub.CreateAddonSettings then
+	warn("API FusionHub не найдено! Убедитесь, что используется Ultimate Version.")
+	return
+end
+
 -- ==========================================
 -- 2. НАСТРОЙКИ СКОРОСТИ И СОСТОЯНИЯ
 -- ==========================================
 local speedSettings = {
 	Enabled = false,
-	TargetSpeed = 50 -- Стандартная скорость для чита
+	TargetSpeed = 50
 }
 
-local originalSpeed = 16 -- Переменная для хранения оригинальной скорости
+local originalSpeed = 16
 local speedConnection = nil
 
 -- ==========================================
@@ -37,7 +41,7 @@ local speedRow = Instance.new("Frame")
 speedRow.Name = "SpeedRow"
 speedRow.Size = UDim2.new(1, -15, 0, 45)
 speedRow.BackgroundTransparency = 1
-speedRow.LayoutOrder = 7 -- Встает после Fly (у которого 6)
+speedRow.LayoutOrder = 7
 speedRow.Parent = scrollFrame
 
 -- ==========================================
@@ -46,12 +50,8 @@ speedRow.Parent = scrollFrame
 local speedBtn = Instance.new("TextButton")
 speedBtn.Name = "SpeedToggleButton"
 speedBtn.Size = UDim2.new(1, -55, 1, 0)
-speedBtn.Position = UDim2.new(0, 0, 0, 0)
 speedBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-speedBtn.BackgroundTransparency = 0.4
 speedBtn.Text = ""
-speedBtn.AutoButtonColor = true
-speedBtn.Active = true
 speedBtn.Parent = speedRow
 
 local speedCorner = Instance.new("UICorner")
@@ -77,9 +77,6 @@ settingsBtn.Name = "SpeedSettingsButton"
 settingsBtn.Size = UDim2.new(0, 45, 0, 45)
 settingsBtn.Position = UDim2.new(1, -45, 0, 0)
 settingsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-settingsBtn.BackgroundTransparency = 0.4
-settingsBtn.AutoButtonColor = true
-settingsBtn.Active = true
 settingsBtn.Parent = speedRow
 
 local settingsCorner = Instance.new("UICorner")
@@ -91,43 +88,20 @@ settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
 settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 settingsIcon.BackgroundTransparency = 1
-settingsIcon.Image = "rbxassetid://9405931578" -- Иконка шестеренки
+settingsIcon.Image = "rbxassetid://9405931578"
 settingsIcon.Parent = settingsBtn
 
 -- ==========================================
--- 6. МЕНЮ НАСТРОЕК SPEED (ПЛАВАЮЩЕЕ)
+-- 6. ИСПОЛЬЗОВАНИЕ GLOBAL API ДЛЯ МЕНЮ НАСТРОЕК
 -- ==========================================
-local speedMenu = Instance.new("CanvasGroup")
-speedMenu.Name = "SpeedSettingsMenu"
-speedMenu.Size = UDim2.new(0, 250, 0, 180)
-speedMenu.Position = UDim2.new(0.5, 100, 0.5, 120) -- Появляется правее и ниже центра
-speedMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-speedMenu.BackgroundTransparency = 0.1
-speedMenu.GroupTransparency = 1
-speedMenu.Visible = false
-speedMenu.Parent = screenGui
+-- Генерируем окно через встроенную функцию хаба (включает "X" кнопку, стили и Drag&Drop)
+local settingsAPI = _G.FusionHub.CreateAddonSettings("Speed Settings", 250, 180)
+local speedMenu = settingsAPI.Window
 
-local speedMenuCorner = Instance.new("UICorner")
-speedMenuCorner.CornerRadius = UDim.new(0, 12)
-speedMenuCorner.Parent = speedMenu
+-- Привязываем шестеренку к функции открытия/закрытия окна
+settingsBtn.Activated:Connect(settingsAPI.ToggleFunction)
 
-local speedMenuStroke = Instance.new("UIStroke")
-speedMenuStroke.Color = Color3.fromRGB(255, 255, 255)
-speedMenuStroke.Transparency = 0.8
-speedMenuStroke.Thickness = 1
-speedMenuStroke.Parent = speedMenu
-
-local speedMenuTitle = Instance.new("TextLabel")
-speedMenuTitle.Size = UDim2.new(1, 0, 0, 30)
-speedMenuTitle.Position = UDim2.new(0, 0, 0, 10)
-speedMenuTitle.BackgroundTransparency = 1
-speedMenuTitle.Text = "Speed Settings"
-speedMenuTitle.Font = Enum.Font.GothamBold
-speedMenuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-speedMenuTitle.TextSize = 16
-speedMenuTitle.Parent = speedMenu
-
--- Поле ввода скорости
+-- Поле ввода скорости (добавляем внутрь сгенерированного окна)
 local speedBox = Instance.new("TextBox")
 speedBox.Size = UDim2.new(1, -20, 0, 35)
 speedBox.Position = UDim2.new(0, 10, 0, 50)
@@ -144,8 +118,18 @@ speedBoxCorner.CornerRadius = UDim.new(0, 6)
 speedBoxCorner.Parent = speedBox
 
 local speedBoxStroke = Instance.new("UIStroke")
-speedBoxStroke.Color = Color3.fromRGB(100, 100, 110)
+speedBoxStroke.Color = Color3.fromRGB(80, 80, 90)
 speedBoxStroke.Parent = speedBox
+
+-- Обновление скорости из поля ввода
+speedBox.FocusLost:Connect(function()
+	local num = tonumber(speedBox.Text)
+	if num then
+		speedSettings.TargetSpeed = num
+	else
+		speedBox.Text = tostring(speedSettings.TargetSpeed)
+	end
+end)
 
 -- Подпись для быстрых пресетов
 local presetsLabel = Instance.new("TextLabel")
@@ -174,12 +158,11 @@ speedsLayout.Parent = speedsFrame
 local function createSpeedBtn(speedValue, displayName)
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(0, 45, 0, 30)
-	btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+	btn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 	btn.Text = displayName
 	btn.Font = Enum.Font.GothamBold
 	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	btn.TextSize = 12
-	btn.Active = true
 	btn.Parent = speedsFrame
 	
 	local btnRound = Instance.new("UICorner")
@@ -199,69 +182,7 @@ createSpeedBtn(100, "Zoom")
 createSpeedBtn(250, "God")
 
 -- ==========================================
--- 7. ЛОГИКА И АНИМАЦИИ МЕНЮ НАСТРОЕК
--- ==========================================
-local isSettingsOpen = false
-
-settingsBtn.Activated:Connect(function()
-	isSettingsOpen = not isSettingsOpen
-	if isSettingsOpen then
-		speedMenu.Visible = true
-		TweenService:Create(speedMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
-			GroupTransparency = 0
-		}):Play()
-	else
-		local closeTween = TweenService:Create(speedMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
-			GroupTransparency = 1
-		})
-		closeTween:Play()
-		closeTween.Completed:Wait()
-		if not isSettingsOpen then
-			speedMenu.Visible = false
-		end
-	end
-end)
-
--- Обновление скорости из поля ввода
-speedBox.FocusLost:Connect(function()
-	local num = tonumber(speedBox.Text)
-	if num then
-		speedSettings.TargetSpeed = num
-	else
-		speedBox.Text = tostring(speedSettings.TargetSpeed)
-	end
-end)
-
--- Система перетаскивания (Drag)
-local draggingSpeed, dragInputSpeed, dragStartSpeed, startPosSpeed
-speedMenu.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		draggingSpeed = true
-		dragStartSpeed = input.Position
-		startPosSpeed = speedMenu.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then draggingSpeed = false end
-		end)
-	end
-end)
-
-speedMenu.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInputSpeed = input
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInputSpeed and draggingSpeed then
-		local delta = input.Position - dragStartSpeed
-		TweenService:Create(speedMenu, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-			Position = UDim2.new(startPosSpeed.X.Scale, startPosSpeed.X.Offset + delta.X, startPosSpeed.Y.Scale, startPosSpeed.Y.Offset + delta.Y)
-		}):Play()
-	end
-end)
-
--- ==========================================
--- 8. ЛОГИКА СКОРОСТИ (SPEED HACK)
+-- 7. ЛОГИКА СКОРОСТИ (SPEED HACK)
 -- ==========================================
 local function toggleSpeed()
 	speedSettings.Enabled = not speedSettings.Enabled
@@ -274,13 +195,13 @@ local function toggleSpeed()
 		speedLabel.Text = "Speed: ON"
 		speedLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
 		speedBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+		-- Устанавливаем атрибут, чтобы hover ядра восстанавливал правильный цвет
+		speedBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))
 		
-		-- Сохраняем текущую скорость перед изменением, если персонаж существует
 		if humanoid then
 			originalSpeed = humanoid.WalkSpeed
 		end
 		
-		-- Используем цикл, чтобы игра (или античиты) не сбросила скорость обратно
 		speedConnection = RunService.Heartbeat:Connect(function()
 			local currentHumanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 			if currentHumanoid and currentHumanoid.WalkSpeed ~= speedSettings.TargetSpeed then
@@ -293,14 +214,13 @@ local function toggleSpeed()
 		speedLabel.Text = "Speed: OFF"
 		speedLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
 		speedBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		speedBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
 		
-		-- Отключаем цикл удержания скорости
 		if speedConnection then
 			speedConnection:Disconnect()
 			speedConnection = nil
 		end
 		
-		-- Возвращаем оригинальную скорость
 		if humanoid then
 			humanoid.WalkSpeed = originalSpeed
 		end
@@ -313,8 +233,6 @@ speedBtn.Activated:Connect(toggleSpeed)
 player.CharacterAdded:Connect(function(newChar)
 	local humanoid = newChar:WaitForChild("Humanoid", 5)
 	if humanoid then
-		-- Если спидхак включен, мы не меняем originalSpeed (он сохранил прошлую)
-		-- Если выключен - обновляем originalSpeed на ту, которую дала игра при спавне
 		if not speedSettings.Enabled then
 			originalSpeed = humanoid.WalkSpeed
 		end
