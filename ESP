@@ -2,7 +2,7 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Teams = game:GetService("Teams") -- Подключаем сервис команд
+local Teams = game:GetService("Teams")
 
 local player = Players.LocalPlayer
 
@@ -23,30 +23,29 @@ local scrollFrame = menuGroup:WaitForChild("ContentScroll")
 -- ==========================================
 local espSettings = {
 	Enabled = false,
-	Mode = "All", -- "All" (Все), "Enemies" (Кроме своей команды), "Team:[Имя]" (Конкретная команда), "Target" (Цель)
+	Mode = "All", 
 	TargetName = "",
-	Color = Color3.fromRGB(255, 50, 50)
+	Color = Color3.fromRGB(255, 50, 50), -- Базовый цвет (или цвет за стеной)
+	WallCheck = false,                   -- Проверка видимости
+	VisibleColor = Color3.fromRGB(50, 255, 50) -- Цвет при прямой видимости
 }
 
-local espObjects = {} -- Таблица для хранения созданных элементов Highlight
+local espObjects = {}
 local espConnection = nil
 
 -- ==========================================
--- 2. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
+-- 2. СОЗДАНИЕ КНОПОК В МЕНЮ
 -- ==========================================
 local espRow = Instance.new("Frame")
 espRow.Name = "EspRow"
 espRow.Size = UDim2.new(1, -15, 0, 45)
 espRow.BackgroundTransparency = 1
-espRow.LayoutOrder = 4 -- Встает в список после стандартных кнопок
+espRow.LayoutOrder = 4
 espRow.Parent = scrollFrame
 
--- ==========================================
--- 3. КНОПКА ESP (ОСНОВНАЯ)
--- ==========================================
 local espBtn = Instance.new("TextButton")
 espBtn.Name = "EspToggleButton"
-espBtn.Size = UDim2.new(1, -55, 1, 0) -- Оставляем место справа для шестеренки
+espBtn.Size = UDim2.new(1, -55, 1, 0)
 espBtn.Position = UDim2.new(0, 0, 0, 0)
 espBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 espBtn.BackgroundTransparency = 0.4
@@ -55,9 +54,7 @@ espBtn.AutoButtonColor = true
 espBtn.Active = true
 espBtn.Parent = espRow
 
-local espCorner = Instance.new("UICorner")
-espCorner.CornerRadius = UDim.new(0, 8)
-espCorner.Parent = espBtn
+Instance.new("UICorner", espBtn).CornerRadius = UDim.new(0, 8)
 
 local espLabel = Instance.new("TextLabel")
 espLabel.Size = UDim2.new(1, -20, 1, 0)
@@ -70,9 +67,6 @@ espLabel.TextSize = 14
 espLabel.TextXAlignment = Enum.TextXAlignment.Left
 espLabel.Parent = espBtn
 
--- ==========================================
--- 4. КНОПКА НАСТРОЕК ESP (ШЕСТЕРЕНКА)
--- ==========================================
 local settingsBtn = Instance.new("ImageButton")
 settingsBtn.Name = "EspSettingsButton"
 settingsBtn.Size = UDim2.new(0, 45, 0, 45)
@@ -83,254 +77,247 @@ settingsBtn.AutoButtonColor = true
 settingsBtn.Active = true
 settingsBtn.Parent = espRow
 
-local settingsCorner = Instance.new("UICorner")
-settingsCorner.CornerRadius = UDim.new(0, 8)
-settingsCorner.Parent = settingsBtn
+Instance.new("UICorner", settingsBtn).CornerRadius = UDim.new(0, 8)
 
 local settingsIcon = Instance.new("ImageLabel")
 settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
 settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
 settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 settingsIcon.BackgroundTransparency = 1
-settingsIcon.Image = "rbxassetid://9405931578" -- Твоя текстура шестеренки
+settingsIcon.Image = "rbxassetid://9405931578" 
 settingsIcon.Parent = settingsBtn
 
 -- ==========================================
--- 5. МЕНЮ НАСТРОЕК ESP (ПЛАВАЮЩЕЕ)
+-- 3. ИСПОЛЬЗОВАНИЕ API FUSIONHUB ДЛЯ ОКНА НАСТРОЕК
 -- ==========================================
-local espMenu = Instance.new("CanvasGroup")
-espMenu.Name = "EspSettingsMenu"
-espMenu.Size = UDim2.new(0, 250, 0, 220)
-espMenu.Position = UDim2.new(0.5, 100, 0.5, -110) -- Появляется чуть правее центра экрана
-espMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-espMenu.BackgroundTransparency = 0.1
-espMenu.GroupTransparency = 1
-espMenu.Visible = false
-espMenu.Parent = screenGui
+-- Запрашиваем окно через встроенный метод, начальная высота 290
+local settingsAPI = _G.FusionHub.CreateAddonSettings("ESP Settings", 260, 290)
+local espMenu = settingsAPI.Window
 
-local espMenuCorner = Instance.new("UICorner")
-espMenuCorner.CornerRadius = UDim.new(0, 12)
-espMenuCorner.Parent = espMenu
+-- Привязываем открытие/закрытие окна к шестеренке
+settingsBtn.Activated:Connect(settingsAPI.ToggleFunction)
 
-local espMenuStroke = Instance.new("UIStroke")
-espMenuStroke.Color = Color3.fromRGB(255, 255, 255)
-espMenuStroke.Transparency = 0.8
-espMenuStroke.Thickness = 1
-espMenuStroke.Parent = espMenu
+-- Контейнер для элементов внутри окна (с UIListLayout для удобства)
+local container = Instance.new("Frame")
+container.Size = UDim2.new(1, -20, 1, -50)
+container.Position = UDim2.new(0, 10, 0, 45)
+container.BackgroundTransparency = 1
+container.Parent = espMenu
 
-local espMenuTitle = Instance.new("TextLabel")
-espMenuTitle.Size = UDim2.new(1, 0, 0, 30)
-espMenuTitle.Position = UDim2.new(0, 0, 0, 10)
-espMenuTitle.BackgroundTransparency = 1
-espMenuTitle.Text = "ESP Settings"
-espMenuTitle.Font = Enum.Font.GothamBold
-espMenuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-espMenuTitle.TextSize = 16
-espMenuTitle.Parent = espMenu
+local layout = Instance.new("UIListLayout")
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0, 8)
+layout.Parent = container
 
--- Кнопка переключения режимов (Все / Враги / Конкретная Команда / Цель)
+-- ==========================================
+-- 4. НАПОЛНЕНИЕ МЕНЮ НАСТРОЕК
+-- ==========================================
+-- 4.1 Режим ESP
 local modeBtn = Instance.new("TextButton")
-modeBtn.Size = UDim2.new(1, -20, 0, 35)
-modeBtn.Position = UDim2.new(0, 10, 0, 50)
+modeBtn.Size = UDim2.new(1, 0, 0, 35)
 modeBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 modeBtn.Text = "Mode: All"
 modeBtn.Font = Enum.Font.GothamMedium
 modeBtn.TextColor3 = Color3.fromRGB(200, 200, 205)
 modeBtn.TextSize = 13
-modeBtn.Active = true
-modeBtn.Parent = espMenu
+modeBtn.LayoutOrder = 1
+modeBtn.Parent = container
+Instance.new("UICorner", modeBtn).CornerRadius = UDim.new(0, 6)
 
-local modeCorner = Instance.new("UICorner")
-modeCorner.CornerRadius = UDim.new(0, 6)
-modeCorner.Parent = modeBtn
-
--- Поле ввода никнейма для режима "Target"
+-- 4.2 Поле для цели (скрыто по умолчанию)
 local targetBox = Instance.new("TextBox")
-targetBox.Size = UDim2.new(1, -20, 0, 35)
-targetBox.Position = UDim2.new(0, 10, 0, 95)
+targetBox.Size = UDim2.new(1, 0, 0, 35)
 targetBox.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-targetBox.PlaceholderText = "Enter the player's nickname..."
+targetBox.PlaceholderText = "Enter nickname..."
 targetBox.Text = ""
 targetBox.Font = Enum.Font.Gotham
 targetBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 targetBox.TextSize = 13
 targetBox.Visible = false
-targetBox.Parent = espMenu
+targetBox.LayoutOrder = 2
+targetBox.Parent = container
+Instance.new("UICorner", targetBox).CornerRadius = UDim.new(0, 6)
+Instance.new("UIStroke", targetBox).Color = Color3.fromRGB(100, 100, 110)
 
-local targetCorner = Instance.new("UICorner")
-targetCorner.CornerRadius = UDim.new(0, 6)
-targetCorner.Parent = targetBox
-
-local targetStroke = Instance.new("UIStroke")
-targetStroke.Color = Color3.fromRGB(100, 100, 110)
-targetStroke.Parent = targetBox
-
--- Контейнер для выбора цвета
-local colorsFrame = Instance.new("Frame")
-colorsFrame.Size = UDim2.new(1, -20, 0, 35)
-colorsFrame.Position = UDim2.new(0, 10, 0, 140)
-colorsFrame.BackgroundTransparency = 1
-colorsFrame.Parent = espMenu
-
-local colorsLayout = Instance.new("UIListLayout")
-colorsLayout.FillDirection = Enum.FillDirection.Horizontal
-colorsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-colorsLayout.Padding = UDim.new(0, 10)
-colorsLayout.Parent = colorsFrame
-
-local function createColorBtn(color)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 30, 0, 30)
-	btn.BackgroundColor3 = color
-	btn.Text = ""
-	btn.Active = true
-	btn.Parent = colorsFrame
-	
-	local btnRound = Instance.new("UICorner")
-	btnRound.CornerRadius = UDim.new(1, 0)
-	btnRound.Parent = btn
-	
-	local btnStroke = Instance.new("UIStroke")
-	btnStroke.Color = Color3.fromRGB(255, 255, 255)
-	btnStroke.Thickness = 1.5
-	btnStroke.Parent = btn
-	
-	btn.Activated:Connect(function()
-		espSettings.Color = color
-	end)
+-- Вспомогательная функция для текста
+local function createLabel(text, order)
+	local lbl = Instance.new("TextLabel")
+	lbl.Size = UDim2.new(1, 0, 0, 18)
+	lbl.BackgroundTransparency = 1
+	lbl.Text = text
+	lbl.Font = Enum.Font.GothamMedium
+	lbl.TextColor3 = Color3.fromRGB(180, 180, 185)
+	lbl.TextSize = 12
+	lbl.TextXAlignment = Enum.TextXAlignment.Left
+	lbl.LayoutOrder = order
+	lbl.Parent = container
+	return lbl
 end
 
--- Палитра быстрых цветов
-createColorBtn(Color3.fromRGB(255, 50, 50))   -- Красный
-createColorBtn(Color3.fromRGB(50, 255, 50))   -- Зеленый
-createColorBtn(Color3.fromRGB(50, 150, 255))  -- Синий
-createColorBtn(Color3.fromRGB(255, 255, 50))  -- Желтый
-createColorBtn(Color3.fromRGB(255, 50, 255))  -- Пурпурный
-
--- ==========================================
--- 6. ЛОГИКА И АНИМАЦИИ МЕНЮ НАСТРОЕК
--- ==========================================
-local isSettingsOpen = false
-
-settingsBtn.Activated:Connect(function()
-	isSettingsOpen = not isSettingsOpen
-	if isSettingsOpen then
-		espMenu.Visible = true
-		TweenService:Create(espMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
-			GroupTransparency = 0
-		}):Play()
-	else
-		local closeTween = TweenService:Create(espMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
-			GroupTransparency = 1
-		})
-		closeTween:Play()
-		closeTween.Completed:Wait()
-		if not isSettingsOpen then
-			espMenu.Visible = false
-		end
-	end
-end)
-
--- Система перетаскивания (Drag) для меню настроек ESP
-local draggingEsp, dragInputEsp, dragStartEsp, startPosEsp
-espMenu.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		draggingEsp = true
-		dragStartEsp = input.Position
-		startPosEsp = espMenu.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then draggingEsp = false end
-		end)
-	end
-end)
-
-espMenu.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInputEsp = input
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInputEsp and draggingEsp then
-		local delta = input.Position - dragStartEsp
-		TweenService:Create(espMenu, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-			Position = UDim2.new(startPosEsp.X.Scale, startPosEsp.X.Offset + delta.X, startPosEsp.Y.Scale, startPosEsp.Y.Offset + delta.Y)
-		}):Play()
-	end
-end)
-
--- Улучшенная логика смены режимов: Ищем команды везде и добавляем "Враги"
-modeBtn.Activated:Connect(function()
-	local availableModes = {"All", "Enemies"} -- Добавлен режим "Враги"
-	local foundTeams = {} -- Таблица для исключения дубликатов
+-- Вспомогательная функция для палитры
+local function createColorPalette(order, onSelect)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, 0, 0, 30)
+	frame.BackgroundTransparency = 1
+	frame.LayoutOrder = order
+	frame.Parent = container
 	
-	-- 1. Сначала пытаемся получить из стандартного сервиса Teams
+	local l = Instance.new("UIListLayout")
+	l.FillDirection = Enum.FillDirection.Horizontal
+	l.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	l.Padding = UDim.new(0, 10)
+	l.Parent = frame
+	
+	local colors = {
+		Color3.fromRGB(255, 50, 50),
+		Color3.fromRGB(50, 255, 50),
+		Color3.fromRGB(50, 150, 255),
+		Color3.fromRGB(255, 255, 50),
+		Color3.fromRGB(255, 50, 255)
+	}
+	
+	for _, c in ipairs(colors) do
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(0, 30, 0, 30)
+		btn.BackgroundColor3 = c
+		btn.Text = ""
+		btn.Parent = frame
+		Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+		local stroke = Instance.new("UIStroke", btn)
+		stroke.Color = Color3.fromRGB(255, 255, 255)
+		stroke.Thickness = 1.5
+		
+		btn.Activated:Connect(function() onSelect(c) end)
+	end
+	return frame
+end
+
+-- 4.3 Тогл Wall Check (Проверка видимости)
+local wallCheckBtn = Instance.new("TextButton")
+wallCheckBtn.Size = UDim2.new(1, 0, 0, 35)
+wallCheckBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+wallCheckBtn.Text = "Wall Check: OFF"
+wallCheckBtn.Font = Enum.Font.GothamMedium
+wallCheckBtn.TextColor3 = Color3.fromRGB(180, 180, 185)
+wallCheckBtn.TextSize = 13
+wallCheckBtn.LayoutOrder = 3
+wallCheckBtn.Parent = container
+Instance.new("UICorner", wallCheckBtn).CornerRadius = UDim.new(0, 6)
+
+-- 4.4 Палитра 1 (Базовый цвет / За стеной)
+local defaultColorLabel = createLabel("Default / Wall Color:", 4)
+local palette1 = createColorPalette(5, function(c) espSettings.Color = c end)
+
+-- 4.5 Палитра 2 (В зоне видимости) - Скрыто по умолчанию
+local visibleColorLabel = createLabel("Visible Color:", 6)
+visibleColorLabel.Visible = false
+local palette2 = createColorPalette(7, function(c) espSettings.VisibleColor = c end)
+palette2.Visible = false
+
+-- ==========================================
+-- 5. ЛОГИКА UI НАСТРОЕК
+-- ==========================================
+-- Смена режимов
+modeBtn.Activated:Connect(function()
+	local availableModes = {"All", "Enemies"}
+	local foundTeams = {}
+	
 	for _, team in ipairs(Teams:GetTeams()) do
 		if not foundTeams[team.Name] then
 			foundTeams[team.Name] = true
 			table.insert(availableModes, "Team:" .. team.Name)
 		end
 	end
-	
-	-- 2. Надежный фоллбэк: ищем команды прямо у игроков на сервере
 	for _, p in ipairs(Players:GetPlayers()) do
-		if p.Team and p.Team.Name ~= "" then
-			if not foundTeams[p.Team.Name] then
-				foundTeams[p.Team.Name] = true
-				table.insert(availableModes, "Team:" .. p.Team.Name)
-			end
+		if p.Team and p.Team.Name ~= "" and not foundTeams[p.Team.Name] then
+			foundTeams[p.Team.Name] = true
+			table.insert(availableModes, "Team:" .. p.Team.Name)
 		end
 	end
+	table.insert(availableModes, "Target")
 	
-	table.insert(availableModes, "Target") -- В конце всегда добавляем поиск по цели
-	
-	-- Ищем текущий индекс
-	local currentIndex = 1
-	for i, mode in ipairs(availableModes) do
-		if mode == espSettings.Mode then
-			currentIndex = i
-			break
-		end
-	end
-	
-	-- Переключаем на следующий индекс (или сбрасываем на 1, если дошли до конца)
-	local nextIndex = currentIndex + 1
-	if nextIndex > #availableModes then
-		nextIndex = 1
-	end
-	
+	local currentIndex = table.find(availableModes, espSettings.Mode) or 1
+	local nextIndex = (currentIndex % #availableModes) + 1
 	local newMode = availableModes[nextIndex]
-	espSettings.Mode = newMode
 	
-	-- Обновляем визуал кнопки
-	if newMode == "All" then
-		modeBtn.Text = "Mode: All"
-		targetBox.Visible = false
-	elseif newMode == "Enemies" then
-		modeBtn.Text = "Mode: Enemies"
-		targetBox.Visible = false
-	elseif newMode == "Target" then
-		modeBtn.Text = "Mode: Target"
-		targetBox.Visible = true
-	elseif string.sub(newMode, 1, 5) == "Team:" then
-		local teamName = string.sub(newMode, 6)
-		modeBtn.Text = "Команда: " .. teamName
-		targetBox.Visible = false
-	end
+	espSettings.Mode = newMode
+	targetBox.Visible = (newMode == "Target")
+	
+	if newMode == "All" then modeBtn.Text = "Mode: All"
+	elseif newMode == "Enemies" then modeBtn.Text = "Mode: Enemies"
+	elseif newMode == "Target" then modeBtn.Text = "Mode: Target"
+	else modeBtn.Text = "Команда: " .. string.sub(newMode, 6) end
+	
+	-- Анимация размера, если поле цели появилось/исчезло
+	local height = 290
+	if targetBox.Visible then height = height + 43 end
+	if espSettings.WallCheck then height = height + 56 end
+	TweenService:Create(espMenu, TweenInfo.new(0.2), {Size = UDim2.new(0, 260, 0, height)}):Play()
 end)
 
 targetBox.FocusLost:Connect(function()
 	espSettings.TargetName = string.lower(targetBox.Text)
 end)
 
+-- Переключатель Wall Check
+wallCheckBtn.Activated:Connect(function()
+	espSettings.WallCheck = not espSettings.WallCheck
+	
+	if espSettings.WallCheck then
+		wallCheckBtn.Text = "Wall Check: ON"
+		wallCheckBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
+		wallCheckBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+		visibleColorLabel.Visible = true
+		palette2.Visible = true
+	else
+		wallCheckBtn.Text = "Wall Check: OFF"
+		wallCheckBtn.TextColor3 = Color3.fromRGB(180, 180, 185)
+		wallCheckBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		visibleColorLabel.Visible = false
+		palette2.Visible = false
+	end
+	
+	-- Пересчет высоты меню
+	local height = 290
+	if targetBox.Visible then height = height + 43 end
+	if espSettings.WallCheck then height = height + 56 end
+	TweenService:Create(espMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Size = UDim2.new(0, 260, 0, height)}):Play()
+end)
+
 -- ==========================================
--- 7. ФУНКЦИОНАЛ ПОДСВЕТКИ (ESP)
+-- 6. ФУНКЦИОНАЛ ПОДСВЕТКИ И RAYCAST
 -- ==========================================
 local function clearESP()
 	for p, highlight in pairs(espObjects) do
 		if highlight then highlight:Destroy() end
 	end
 	table.clear(espObjects)
+end
+
+-- Функция проверки на видимость (Raycast)
+local function isCharacterVisible(targetChar)
+	local camera = workspace.CurrentCamera
+	local origin = camera.CFrame.Position
+	local targetPart = targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild("Head") or targetChar:FindFirstChild("Torso")
+	
+	if not targetPart then return false end
+	
+	local direction = (targetPart.Position - origin)
+	
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	-- Игнорируем камеру и своего персонажа
+	rayParams.FilterDescendantsInstances = {camera, player.Character}
+	rayParams.IgnoreWater = true
+	
+	-- Немного удлиняем вектор, чтобы гарантированно достать до центра детали
+	local result = workspace:Raycast(origin, direction.Unit * (direction.Magnitude + 1), rayParams)
+	
+	if result and result.Instance and result.Instance:IsDescendantOf(targetChar) then
+		return true -- Луч достиг персонажа (он видимый)
+	end
+	
+	return false -- Луч врезался в стену или препятствие
 end
 
 local function updateESP()
@@ -348,23 +335,14 @@ local function updateESP()
 			if char and hrp and humanoid and humanoid.Health > 0 then
 				local shouldHighlight = false
 				
-				-- Проверка условий фильтрации
+				-- Фильтры
 				if espSettings.Mode == "All" then
 					shouldHighlight = true
-					
 				elseif espSettings.Mode == "Enemies" then
-					-- Подсвечивает, если команда цели отличается от нашей (или если у нас нет команды)
-					if player.Team == nil or v.Team ~= player.Team then
-						shouldHighlight = true
-					end
-					
+					if player.Team == nil or v.Team ~= player.Team then shouldHighlight = true end
 				elseif string.sub(espSettings.Mode, 1, 5) == "Team:" then
-					-- Проверяем принадлежность к выбранной команде
 					local targetTeamName = string.sub(espSettings.Mode, 6)
-					if v.Team and v.Team.Name == targetTeamName then
-						shouldHighlight = true
-					end
-					
+					if v.Team and v.Team.Name == targetTeamName then shouldHighlight = true end
 				elseif espSettings.Mode == "Target" then
 					if espSettings.TargetName ~= "" then
 						local nameLower = string.lower(v.Name)
@@ -375,11 +353,9 @@ local function updateESP()
 					end
 				end
 				
-				-- Применение или удаление Highlight эффекта
 				if shouldHighlight then
 					local highlight = espObjects[v]
 					
-					-- Пересоздаем, если объект был удален движком
 					if not highlight or not highlight:IsDescendantOf(game) then
 						if highlight then highlight:Destroy() end
 						highlight = Instance.new("Highlight")
@@ -391,12 +367,19 @@ local function updateESP()
 						espObjects[v] = highlight
 					end
 					
-					-- Обновляем динамические свойства
-					highlight.FillColor = espSettings.Color
-					highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-					if highlight.Parent ~= char then
-						highlight.Parent = char
+					-- ЛОГИКА 2-Х ЦВЕТОВ (WALL CHECK)
+					local activeColor = espSettings.Color
+					
+					if espSettings.WallCheck then
+						if isCharacterVisible(char) then
+							activeColor = espSettings.VisibleColor
+						end
 					end
+					
+					highlight.FillColor = activeColor
+					highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+					
+					if highlight.Parent ~= char then highlight.Parent = char end
 				else
 					if espObjects[v] then
 						espObjects[v]:Destroy()
@@ -404,7 +387,6 @@ local function updateESP()
 					end
 				end
 			else
-				-- Если персонаж умер, вышел или удалился из игры
 				if espObjects[v] then
 					espObjects[v]:Destroy()
 					espObjects[v] = nil
@@ -414,7 +396,7 @@ local function updateESP()
 	end
 end
 
--- Обработка включения / выключения по кнопке
+-- Включение/выключение
 espBtn.Activated:Connect(function()
 	espSettings.Enabled = not espSettings.Enabled
 	
@@ -422,14 +404,11 @@ espBtn.Activated:Connect(function()
 		espLabel.Text = "ESP: ON"
 		espLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
 		espBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
-		
-		-- Привязываем безопасный цикл обновления
 		espConnection = RunService.Heartbeat:Connect(updateESP)
 	else
 		espLabel.Text = "ESP: OFF"
 		espLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
 		espBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-		
 		if espConnection then
 			espConnection:Disconnect()
 			espConnection = nil
@@ -438,7 +417,6 @@ espBtn.Activated:Connect(function()
 	end
 end)
 
--- Очистка памяти при выходе игроков с сервера
 Players.PlayerRemoving:Connect(function(leavingPlayer)
 	if espObjects[leavingPlayer] then
 		espObjects[leavingPlayer]:Destroy()
