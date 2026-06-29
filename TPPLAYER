@@ -18,6 +18,12 @@ end
 local menuGroup = screenGui:WaitForChild("MainMenu")
 local scrollFrame = menuGroup:WaitForChild("ContentScroll")
 
+-- Проверка наличия API FusionHub
+if not _G.FusionHub or not _G.FusionHub.CreateAddonSettings then
+	warn("API FusionHub не найдено! Обновите главное ядро хаба.")
+	return
+end
+
 -- ==========================================
 -- 2. СОСТОЯНИЕ АДДОНА
 -- ==========================================
@@ -88,44 +94,16 @@ settingsIcon.Image = "rbxassetid://9405931578" -- Иконка шестерен�
 settingsIcon.Parent = settingsBtn
 
 -- ==========================================
--- 6. МЕНЮ НАСТРОЕК (ПЛАВАЮЩЕЕ)
+-- 6. МЕНЮ НАСТРОЕК (ИСПОЛЬЗУЕМ ВСТРОЕННЫЙ API FUSIONHUB)
 -- ==========================================
-local tpMenu = Instance.new("CanvasGroup")
-tpMenu.Name = "TPSettingsMenu"
-tpMenu.Size = UDim2.new(0, 260, 0, 300)
-tpMenu.Position = UDim2.new(0.5, 100, 0.5, -150)
-tpMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-tpMenu.BackgroundTransparency = 0.1
-tpMenu.GroupTransparency = 1
-tpMenu.Visible = false
-tpMenu.Parent = screenGui
+-- Фабрика автоматически создает окно в стиле хаба, с кнопкой "Х" и настроенным Drag & Drop
+local settingsAPI = _G.FusionHub.CreateAddonSettings("Select Player", 260, 320)
+local tpMenu = settingsAPI.Window
 
-local tpMenuCorner = Instance.new("UICorner")
-tpMenuCorner.CornerRadius = UDim.new(0, 12)
-tpMenuCorner.Parent = tpMenu
-
-local tpMenuStroke = Instance.new("UIStroke")
-tpMenuStroke.Color = Color3.fromRGB(255, 255, 255)
-tpMenuStroke.Transparency = 0.8
-tpMenuStroke.Thickness = 1
-tpMenuStroke.Parent = tpMenu
-
--- Заголовок меню
-local tpMenuTitle = Instance.new("TextLabel")
-tpMenuTitle.Size = UDim2.new(1, -80, 0, 30)
-tpMenuTitle.Position = UDim2.new(0, 15, 0, 10)
-tpMenuTitle.BackgroundTransparency = 1
-tpMenuTitle.Text = "Select Player"
-tpMenuTitle.Font = Enum.Font.GothamBold
-tpMenuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-tpMenuTitle.TextSize = 16
-tpMenuTitle.TextXAlignment = Enum.TextXAlignment.Left
-tpMenuTitle.Parent = tpMenu
-
--- Кнопка обновления списка (Refresh)
+-- Кнопка обновления списка (сдвинута левее, чтобы не закрывать встроенный крестик)
 local refreshBtn = Instance.new("TextButton")
 refreshBtn.Size = UDim2.new(0, 60, 0, 24)
-refreshBtn.Position = UDim2.new(1, -75, 0, 13)
+refreshBtn.Position = UDim2.new(1, -105, 0, 13)
 refreshBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 refreshBtn.Text = "Refresh"
 refreshBtn.Font = Enum.Font.Gotham
@@ -137,7 +115,7 @@ Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 6)
 -- Скролл-фрейм для списка игроков
 local playerScroll = Instance.new("ScrollingFrame")
 playerScroll.Size = UDim2.new(1, -20, 1, -100)
-playerScroll.Position = UDim2.new(0, 10, 0, 45)
+playerScroll.Position = UDim2.new(0, 10, 0, 50)
 playerScroll.BackgroundTransparency = 1
 playerScroll.BorderSizePixel = 0
 playerScroll.ScrollBarThickness = 4
@@ -151,7 +129,7 @@ local playerLayout = Instance.new("UIListLayout")
 playerLayout.Padding = UDim.new(0, 5)
 playerLayout.Parent = playerScroll
 
--- Кнопка "Save"
+-- Дополнительная кнопка "Save & Close" внизу окна
 local saveBtn = Instance.new("TextButton")
 saveBtn.Size = UDim2.new(1, -20, 0, 35)
 saveBtn.Position = UDim2.new(0, 10, 1, -45)
@@ -164,26 +142,23 @@ saveBtn.Parent = tpMenu
 Instance.new("UICorner", saveBtn).CornerRadius = UDim.new(0, 6)
 
 -- ==========================================
--- 7. ЛОГИКА СПИСКА ИГРОКОВ (ОБНОВЛЕНО)
+-- 7. ЛОГИКА СПИСКА ИГРОКОВ
 -- ==========================================
 local function refreshPlayerList()
-	-- Очищаем старый список
 	for _, child in pairs(playerScroll:GetChildren()) do
 		if child:IsA("TextButton") then
 			child:Destroy()
 		end
 	end
 	
-	-- Добавляем текущих игроков
 	for _, p in pairs(Players:GetPlayers()) do
-		if p ~= player then -- Исключаем самих себя
+		if p ~= player then
 			local btn = Instance.new("TextButton")
-			btn.Size = UDim2.new(1, -10, 0, 36) -- Сделал чуть выше для аватарок
+			btn.Size = UDim2.new(1, -10, 0, 36)
 			
-			-- Смешиваем цвет команды с темным фоном хаба для читаемости текста
 			local baseBg = Color3.fromRGB(30, 30, 35)
 			local teamBg = p.Team and p.TeamColor.Color or baseBg
-			btn.BackgroundColor3 = baseBg:Lerp(teamBg, 0.3) -- 30% интенсивности цвета команды
+			btn.BackgroundColor3 = baseBg:Lerp(teamBg, 0.3)
 			
 			btn.Text = p.DisplayName .. " (@" .. p.Name .. ")"
 			btn.Font = Enum.Font.Gotham
@@ -193,26 +168,22 @@ local function refreshPlayerList()
 			btn.Parent = playerScroll
 			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 			
-			-- Отступы для текста, чтобы он не наезжал на аватарку
 			local padding = Instance.new("UIPadding")
 			padding.PaddingLeft = UDim.new(0, 40)
 			padding.Parent = btn
 			
-			-- Аватарка игрока
 			local avatar = Instance.new("ImageLabel")
 			avatar.Size = UDim2.new(0, 26, 0, 26)
 			avatar.Position = UDim2.new(0, -32, 0.5, -13)
 			avatar.BackgroundTransparency = 1
 			avatar.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 			
-			-- Загружаем миниатюру лица (может слегка задержаться, поэтому обернуто в pcall)
 			pcall(function()
 				avatar.Image = Players:GetUserThumbnailAsync(p.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
 			end)
 			avatar.Parent = btn
 			Instance.new("UICorner", avatar).CornerRadius = UDim.new(1, 0)
 			
-			-- Выделяем, если он уже был выбран (теперь через стильную обводку)
 			if selectedPlayerName == p.Name then
 				local highlight = Instance.new("UIStroke")
 				highlight.Color = Color3.fromRGB(150, 255, 150)
@@ -221,16 +192,14 @@ local function refreshPlayerList()
 				btn.TextColor3 = Color3.fromRGB(255, 255, 255)
 			end
 			
-			-- Обработка клика по игроку в списке
 			btn.Activated:Connect(function()
 				selectedPlayerName = p.Name
 				tpLabel.Text = "Teleport to: " .. p.DisplayName
-				refreshPlayerList() -- Перерисовываем список
+				refreshPlayerList() 
 			end)
 		end
 	end
 	
-	-- Добавление кнопки RANDOM в самый конец списка
 	local randomBtn = Instance.new("TextButton")
 	randomBtn.Size = UDim2.new(1, -10, 0, 36)
 	randomBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
@@ -238,7 +207,7 @@ local function refreshPlayerList()
 	randomBtn.Font = Enum.Font.GothamBold
 	randomBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
 	randomBtn.TextSize = 13
-	randomBtn.LayoutOrder = 9999 -- Принудительно спускаем в самый низ
+	randomBtn.LayoutOrder = 9999 
 	randomBtn.Parent = playerScroll
 	Instance.new("UICorner", randomBtn).CornerRadius = UDim.new(0, 6)
 	
@@ -259,83 +228,28 @@ end
 refreshBtn.Activated:Connect(refreshPlayerList)
 
 -- ==========================================
--- 8. ЛОГИКА МЕНЮ И АНИМАЦИИ (ПОЧИНЕН БАГ С ЗАВИСАНИЕМ)
+-- 8. ЛОГИКА МЕНЮ (ИСПРАВЛЕННАЯ АНИМАЦИЯ)
 -- ==========================================
-local isSettingsOpen = false
-local currentTween = nil -- Храним текущую анимацию для возможности её отмены
-
-local function closeTpMenu()
-	if not isSettingsOpen then return end
-	isSettingsOpen = false
-	
-	if currentTween then currentTween:Cancel() end
-	
-	currentTween = TweenService:Create(tpMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
-		GroupTransparency = 1
-	})
-	currentTween:Play()
-	
-	-- Использование task.delay вместо Completed:Wait() предотвращает зависание скрипта
-	task.delay(0.2, function()
-		if not isSettingsOpen then
-			tpMenu.Visible = false
-		end
-	end)
-end
-
+-- Теперь анимация обрабатывается стабильным ToggleFunction из ядра
 settingsBtn.Activated:Connect(function()
-	isSettingsOpen = not isSettingsOpen
-	if currentTween then currentTween:Cancel() end
-	
-	if isSettingsOpen then
-		refreshPlayerList() -- Обновляем список перед открытием
-		tpMenu.Visible = true
-		currentTween = TweenService:Create(tpMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
-			GroupTransparency = 0
-		})
-		currentTween:Play()
-	else
-		closeTpMenu()
+	if not tpMenu.Visible then
+		refreshPlayerList() -- Обновляем только перед открытием
 	end
+	settingsAPI.ToggleFunction()
 end)
 
-saveBtn.Activated:Connect(closeTpMenu)
-
--- Система перетаскивания (Drag)
-local draggingTp, dragInputTp, dragStartTp, startPosTp
-tpMenu.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		draggingTp = true
-		dragStartTp = input.Position
-		startPosTp = tpMenu.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then draggingTp = false end
-		end)
-	end
-end)
-
-tpMenu.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInputTp = input
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInputTp and draggingTp then
-		local delta = input.Position - dragStartTp
-		TweenService:Create(tpMenu, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-			Position = UDim2.new(startPosTp.X.Scale, startPosTp.X.Offset + delta.X, startPosTp.Y.Scale, startPosTp.Y.Offset + delta.Y)
-		}):Play()
+saveBtn.Activated:Connect(function()
+	if tpMenu.Visible then
+		settingsAPI.ToggleFunction()
 	end
 end)
 
 -- ==========================================
--- 9. ЛОГИКА ТЕЛЕПОРТАЦИИ (С ПОДДЕРЖКОЙ RANDOM)
+-- 9. ЛОГИКА ТЕЛЕПОРТАЦИИ
 -- ==========================================
 tpBtn.Activated:Connect(function()
 	if not selectedPlayerName then
 		warn("Игрок для телепортации не выбран!")
-		-- Визуальная подсказка (красный текст)
 		local oldColor = tpLabel.TextColor3
 		tpLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
 		task.delay(0.5, function()
@@ -346,7 +260,6 @@ tpBtn.Activated:Connect(function()
 	
 	local targetPlayer = nil
 	
-	-- Логика обработки случайного игрока
 	if selectedPlayerName == "RANDOM" then
 		local validPlayers = {}
 		for _, p in pairs(Players:GetPlayers()) do
@@ -362,15 +275,12 @@ tpBtn.Activated:Connect(function()
 		targetPlayer = Players:FindFirstChild(selectedPlayerName)
 	end
 
-	-- Проверка и телепортация
 	if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
 		local myChar = player.Character
 		if myChar and myChar:FindFirstChild("HumanoidRootPart") then
-			-- Телепортируем немного за спину/выше игрока, чтобы не застрять в нем
 			local targetCFrame = targetPlayer.Character.HumanoidRootPart.CFrame
 			myChar.HumanoidRootPart.CFrame = targetCFrame * CFrame.new(0, 2, 3)
 			
-			-- Анимация успешного нажатия (подсветка зеленым на секунду)
 			local oldColor = tpBtn.BackgroundColor3
 			tpBtn.BackgroundColor3 = Color3.fromRGB(45, 120, 45)
 			task.delay(0.2, function()
