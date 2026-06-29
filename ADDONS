@@ -10,3 +10,4 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB
 loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/NOCOOLDOWN"))()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/FLASHBACK"))()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/JERK"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/ANTIFLING"))()
