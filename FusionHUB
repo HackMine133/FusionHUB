@@ -122,14 +122,16 @@ screenGui.Parent = playerGui
 local watermark = Instance.new("TextLabel")
 watermark.Name = "Watermark"
 watermark.Size = UDim2.new(0, 200, 0, 25)
-watermark.Position = UDim2.new(0, 15, 0, 15)
+watermark.AnchorPoint = Vector2.new(1, 1) -- Смещение в правый нижний угол
+watermark.Position = UDim2.new(1, -15, 1, -15) -- Идеальный отступ с краев экрана
+watermark.Active = false -- Позволяет кликать сквозь ватермарку
 watermark.BackgroundColor3 = Color3.fromRGB(HubConfig.MenuColor.R, HubConfig.MenuColor.G, HubConfig.MenuColor.B)
 watermark.BackgroundTransparency = HubConfig.BgTransparency
 watermark.Text = " FusionHub | t.me/sonlvv"
 watermark.Font = Theme.FontBold
 watermark.TextColor3 = Theme.TextPrimary
 watermark.TextSize = 12
-watermark.TextXAlignment = Enum.TextXAlignment.Left
+watermark.TextXAlignment = Enum.TextXAlignment.Center
 watermark.Parent = screenGui
 Instance.new("UICorner", watermark).CornerRadius = UDim.new(0, 6)
 Instance.new("UIStroke", watermark).Color = Theme.StrokeColor
@@ -214,23 +216,30 @@ local function updateGlobalStyles()
 	saveConfig()
 end
 
+local hoverStartColors = {} -- Кэш для защиты цветов кнопок от сброса в серый
+
 local function autoProcessElement(element)
-	-- Подключение звуков и эффектов наведения на новые кнопки (от аддонов)
+	-- Подключение звуков и эффектов наведения на новые кнопки (от аддонов и ядра)
 	if element:IsA("TextButton") or element:IsA("ImageButton") then
 		local conn = element.Activated:Connect(playClickSound)
 		table.insert(uiConnections, conn)
 		
 		local hoverConn1 = element.MouseEnter:Connect(function()
+			-- Запоминаем текущий цвет (или цвет из атрибута), чтобы безопасно вернуть его обратно
+			hoverStartColors[element] = element:GetAttribute("OriginalColor") or element.BackgroundColor3
 			TweenService:Create(element, TweenInfo.new(0.2), {BackgroundColor3 = Theme.ButtonHover}):Play()
 		end)
+		
 		local hoverConn2 = element.MouseLeave:Connect(function()
 			-- Если кнопка активна, не сбрасываем цвет полностью
 			if not element.Name:match("Toggle") or element.BackgroundColor3 ~= Theme.ButtonActiveBg then
+				local restoreColor = element:GetAttribute("OriginalColor") or hoverStartColors[element] or Theme.ButtonBackground
 				TweenService:Create(element, TweenInfo.new(0.2), {
-					BackgroundColor3 = element:GetAttribute("OriginalColor") or Theme.ButtonBackground
+					BackgroundColor3 = restoreColor
 				}):Play()
 			end
 		end)
+		
 		table.insert(uiConnections, hoverConn1)
 		table.insert(uiConnections, hoverConn2)
 		
@@ -287,6 +296,7 @@ _G.FusionHub.CreateAddonSettings = function(titleText, width, height)
 	closeBtn.Size = UDim2.new(0, 30, 0, 30)
 	closeBtn.Position = UDim2.new(1, -35, 0, 10)
 	closeBtn.BackgroundColor3 = Theme.ButtonDangerBg
+	closeBtn:SetAttribute("OriginalColor", Theme.ButtonDangerBg)
 	closeBtn.BackgroundTransparency = 0.2
 	closeBtn.Text = "X"
 	closeBtn.Font = Theme.FontBold
@@ -402,6 +412,7 @@ local getKeyBtn = Instance.new("TextButton")
 getKeyBtn.Size = UDim2.new(0.4, 0, 0, 40)
 getKeyBtn.Position = UDim2.new(0, 20, 0, 120)
 getKeyBtn.BackgroundColor3 = Theme.ButtonBackground
+getKeyBtn:SetAttribute("OriginalColor", Theme.ButtonBackground)
 getKeyBtn.Text = "Get Key"
 getKeyBtn.Font = Theme.FontBold
 getKeyBtn.TextColor3 = Theme.TextPrimary
@@ -413,6 +424,7 @@ local checkKeyBtn = Instance.new("TextButton")
 checkKeyBtn.Size = UDim2.new(0.4, 0, 0, 40)
 checkKeyBtn.Position = UDim2.new(1, -160, 0, 120)
 checkKeyBtn.BackgroundColor3 = Theme.ButtonActiveBg
+checkKeyBtn:SetAttribute("OriginalColor", Theme.ButtonActiveBg)
 checkKeyBtn.Text = "Verify"
 checkKeyBtn.Font = Theme.FontBold
 checkKeyBtn.TextColor3 = Theme.TextPrimary
@@ -552,6 +564,7 @@ local mainSettingsBtn = Instance.new("ImageButton")
 mainSettingsBtn.Size = UDim2.new(0, 35, 0, 35)
 mainSettingsBtn.Position = HubConfig.SidebarPosition == "Left" and UDim2.new(1, -45, 0, 20) or UDim2.new(1, -235, 0, 20)
 mainSettingsBtn.BackgroundColor3 = Theme.ButtonBackground
+mainSettingsBtn:SetAttribute("OriginalColor", Theme.ButtonBackground)
 mainSettingsBtn.AutoButtonColor = true
 mainSettingsBtn.Parent = menuGroup
 Instance.new("UICorner", mainSettingsBtn).CornerRadius = Theme.CornerRadiusButton
@@ -566,6 +579,7 @@ local openBtn = Instance.new("TextButton")
 openBtn.Size = UDim2.new(0, 50, 0, 50)
 openBtn.Position = UDim2.new(0, 20, 0.5, -25)
 openBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+openBtn:SetAttribute("OriginalColor", Color3.fromRGB(20, 20, 25))
 openBtn.BackgroundTransparency = 0.3
 openBtn.Text = ""
 openBtn.Parent = screenGui
@@ -608,6 +622,7 @@ local closeSettingsBtn = Instance.new("TextButton")
 closeSettingsBtn.Size = UDim2.new(0, 30, 0, 30)
 closeSettingsBtn.Position = UDim2.new(1, -35, 0, 10)
 closeSettingsBtn.BackgroundColor3 = Theme.ButtonDangerBg
+closeSettingsBtn:SetAttribute("OriginalColor", Theme.ButtonDangerBg)
 closeSettingsBtn.BackgroundTransparency = 0.2
 closeSettingsBtn.Text = "X"
 closeSettingsBtn.Font = Theme.FontBold
@@ -641,6 +656,7 @@ local posToggleBtn = Instance.new("TextButton")
 posToggleBtn.Size = UDim2.new(1, -20, 0, 30)
 posToggleBtn.Position = UDim2.new(0, 10, 0, 75)
 posToggleBtn.BackgroundColor3 = Theme.ButtonBackground
+posToggleBtn:SetAttribute("OriginalColor", Theme.ButtonBackground)
 posToggleBtn.Text = HubConfig.SidebarPosition == "Left" and "Left (Default)" or "Right"
 posToggleBtn.Font = Theme.FontBold
 posToggleBtn.TextColor3 = Theme.TextPrimary
@@ -699,6 +715,7 @@ local bBox = createRgbBox("B", HubConfig.MenuColor.B)
 local applyColorBtn = Instance.new("TextButton")
 applyColorBtn.Size = UDim2.new(0, 75, 1, 0)
 applyColorBtn.BackgroundColor3 = Color3.fromRGB(45, 120, 45)
+applyColorBtn:SetAttribute("OriginalColor", Color3.fromRGB(45, 120, 45))
 applyColorBtn.Text = "Apply"
 applyColorBtn.Font = Theme.FontBold
 applyColorBtn.TextColor3 = Theme.TextPrimary
@@ -754,6 +771,7 @@ local soundToggleBtn = Instance.new("TextButton")
 soundToggleBtn.Size = UDim2.new(1, -20, 0, 30)
 soundToggleBtn.Position = UDim2.new(0, 10, 0, 280)
 soundToggleBtn.BackgroundColor3 = HubConfig.SoundEnabled and Theme.ButtonActiveBg or Theme.ButtonBackground
+soundToggleBtn:SetAttribute("OriginalColor", soundToggleBtn.BackgroundColor3)
 soundToggleBtn.Text = HubConfig.SoundEnabled and "ON" or "OFF"
 soundToggleBtn.Font = Theme.FontBold
 soundToggleBtn.TextColor3 = HubConfig.SoundEnabled and Theme.TextActive or Theme.TextSecondary
@@ -765,7 +783,9 @@ soundToggleBtn.Activated:Connect(function()
 	HubConfig.SoundEnabled = not HubConfig.SoundEnabled
 	soundToggleBtn.Text = HubConfig.SoundEnabled and "ON" or "OFF"
 	soundToggleBtn.TextColor3 = HubConfig.SoundEnabled and Theme.TextActive or Theme.TextSecondary
-	soundToggleBtn.BackgroundColor3 = HubConfig.SoundEnabled and Theme.ButtonActiveBg or Theme.ButtonBackground
+	local newColor = HubConfig.SoundEnabled and Theme.ButtonActiveBg or Theme.ButtonBackground
+	soundToggleBtn.BackgroundColor3 = newColor
+	soundToggleBtn:SetAttribute("OriginalColor", newColor)
 	saveConfig()
 end)
 
