@@ -100,17 +100,16 @@ settingsIcon.Image = "rbxassetid://9405931578"
 settingsIcon.Parent = settingsBtn
 
 -- ==========================================
--- 5. ВИЗУАЛИЗАЦИЯ FOV КРУГА (ИСПРАВЛЕНО ДЛЯ ЗУМА)
+-- 5. ВИЗУАЛИЗАЦИЯ FOV КРУГА
 -- ==========================================
--- Используем ImageLabel, чтобы скрипт FusionHub не делал его Active = true
 local fovCircle = Instance.new("ImageLabel")
 fovCircle.Name = "AimbotFOV"
 fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
 fovCircle.Size = UDim2.new(0, aimSettings.FOVRadius * 2, 0, aimSettings.FOVRadius * 2)
 fovCircle.BackgroundTransparency = 1
-fovCircle.ImageTransparency = 1 -- Скрываем картинку, чтобы работал только Stroke
-fovCircle.Active = false -- Гарантирует, что мышь не блокируется
+fovCircle.ImageTransparency = 1
+fovCircle.Active = false 
 pcall(function() fovCircle.Interactable = false end)
 fovCircle.Visible = false
 fovCircle.Parent = screenGui
@@ -129,7 +128,7 @@ RunService.RenderStepped:Connect(function()
 	if aimSettings.ShowFOV and aimSettings.Enabled then
 		local mousePos = UserInputService:GetMouseLocation()
 		fovCircle.Position = UDim2.new(0, mousePos.X, 0, mousePos.Y)
-		fovCircle.Active = false -- Дополнительная защита от авто-фикса из MainHub
+		fovCircle.Active = false
 		fovCircle.Visible = true
 	else
 		fovCircle.Visible = false
@@ -137,37 +136,12 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ==========================================
--- 6. МЕНЮ НАСТРОЕК AIMBOT
+-- 6. МЕНЮ НАСТРОЕК AIMBOT (НА ОСНОВЕ API ЯДРА)
 -- ==========================================
-local aimMenu = Instance.new("CanvasGroup")
-aimMenu.Name = "AimSettingsMenu"
-aimMenu.Size = UDim2.new(0, 250, 0, 300) 
-aimMenu.Position = UDim2.new(0.5, 100, 0.5, -150)
-aimMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-aimMenu.BackgroundTransparency = 0.1
-aimMenu.GroupTransparency = 1
-aimMenu.Visible = false
-aimMenu.Parent = screenGui
-
-local aimMenuCorner = Instance.new("UICorner")
-aimMenuCorner.CornerRadius = UDim.new(0, 12)
-aimMenuCorner.Parent = aimMenu
-
-local aimMenuStroke = Instance.new("UIStroke")
-aimMenuStroke.Color = Color3.fromRGB(255, 255, 255)
-aimMenuStroke.Transparency = 0.8
-aimMenuStroke.Thickness = 1
-aimMenuStroke.Parent = aimMenu
-
-local aimMenuTitle = Instance.new("TextLabel")
-aimMenuTitle.Size = UDim2.new(1, 0, 0, 30)
-aimMenuTitle.Position = UDim2.new(0, 0, 0, 10)
-aimMenuTitle.BackgroundTransparency = 1
-aimMenuTitle.Text = "Aimbot Settings"
-aimMenuTitle.Font = Enum.Font.GothamBold
-aimMenuTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-aimMenuTitle.TextSize = 16
-aimMenuTitle.Parent = aimMenu
+-- Используем встроенную функцию хаба для идеальной синхронизации стилей
+local settingsAPI = _G.FusionHub.CreateAddonSettings("Aimbot Settings", 250, 340)
+local aimMenu = settingsAPI.Window
+local toggleAimMenu = settingsAPI.ToggleFunction
 
 local function createSettingsBtn(text, posY, callback)
 	local btn = Instance.new("TextButton")
@@ -211,7 +185,6 @@ createSettingsBtn("Speed: " .. smoothModes[smoothIndex].name, 85, function(btn)
 	if smoothIndex > #smoothModes then smoothIndex = 1 end
 	aimSettings.Smoothness = smoothModes[smoothIndex].value
 	btn.Text = "Speed: " .. smoothModes[smoothIndex].name
-	aimMenuTitle.Text = "Aimbot Settings (" .. smoothModes[smoothIndex].name .. ")"
 end)
 
 createSettingsBtn("Team Check: OFF", 125, function(btn)
@@ -290,53 +263,52 @@ createSettingsBtn("Show FOV: OFF", 245, function(btn)
 	end
 end)
 
--- ==========================================
--- 7. ЛОГИКА И АНИМАЦИИ МЕНЮ НАСТРОЕК
--- ==========================================
-local isSettingsOpen = false
+-- [НОВОЕ] Настройка размера FOV через TextBox
+local fovFrame = Instance.new("Frame")
+fovFrame.Size = UDim2.new(1, -20, 0, 35)
+fovFrame.Position = UDim2.new(0, 10, 0, 285)
+fovFrame.BackgroundTransparency = 1
+fovFrame.Parent = aimMenu
 
+local fovLabel = Instance.new("TextLabel")
+fovLabel.Size = UDim2.new(0.6, 0, 1, 0)
+fovLabel.BackgroundTransparency = 1
+fovLabel.Text = "FOV Radius:"
+fovLabel.Font = Enum.Font.GothamMedium
+fovLabel.TextColor3 = Color3.fromRGB(200, 200, 205)
+fovLabel.TextSize = 13
+fovLabel.TextXAlignment = Enum.TextXAlignment.Left
+fovLabel.Parent = fovFrame
+
+local fovInput = Instance.new("TextBox")
+fovInput.Size = UDim2.new(0.4, 0, 1, 0)
+fovInput.Position = UDim2.new(0.6, 0, 0, 0)
+fovInput.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+fovInput.Text = tostring(aimSettings.FOVRadius)
+fovInput.Font = Enum.Font.GothamBold
+fovInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+fovInput.TextSize = 13
+fovInput.Parent = fovFrame
+
+Instance.new("UICorner", fovInput).CornerRadius = UDim.new(0, 6)
+local fovInputStroke = Instance.new("UIStroke")
+fovInputStroke.Color = Color3.fromRGB(80, 80, 90)
+fovInputStroke.Parent = fovInput
+
+fovInput.FocusLost:Connect(function()
+	local newRadius = tonumber(fovInput.Text)
+	if newRadius then
+		aimSettings.FOVRadius = math.clamp(newRadius, 10, 1500) -- Ограничиваем от 10 до 1500
+	end
+	fovInput.Text = tostring(aimSettings.FOVRadius)
+	fovCircle.Size = UDim2.new(0, aimSettings.FOVRadius * 2, 0, aimSettings.FOVRadius * 2)
+end)
+
+-- ==========================================
+-- 7. ЛОГИКА ОТКРЫТИЯ МЕНЮ НАСТРОЕК
+-- ==========================================
 settingsBtn.Activated:Connect(function()
-	isSettingsOpen = not isSettingsOpen
-	if isSettingsOpen then
-		aimMenu.Visible = true
-		TweenService:Create(aimMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
-			GroupTransparency = 0
-		}):Play()
-	else
-		local closeTween = TweenService:Create(aimMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
-			GroupTransparency = 1
-		})
-		closeTween:Play()
-		closeTween.Completed:Wait()
-		if not isSettingsOpen then aimMenu.Visible = false end
-	end
-end)
-
-local draggingAim, dragInputAim, dragStartAim, startPosAim
-aimMenu.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		draggingAim = true
-		dragStartAim = input.Position
-		startPosAim = aimMenu.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then draggingAim = false end
-		end)
-	end
-end)
-
-aimMenu.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInputAim = input
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInputAim and draggingAim then
-		local delta = input.Position - dragStartAim
-		TweenService:Create(aimMenu, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-			Position = UDim2.new(startPosAim.X.Scale, startPosAim.X.Offset + delta.X, startPosAim.Y.Scale, startPosAim.Y.Offset + delta.Y)
-		}):Play()
-	end
+	toggleAimMenu()
 end)
 
 -- ==========================================
