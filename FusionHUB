@@ -1,101 +1,116 @@
 -- =====================================================================
--- ФАЙЛ: FusionHub.lua
--- ОПИСАНИЕ: Главное ядро пользовательского интерфейса FusionHub (Версия 3.1)
--- СОВМЕСТИМОСТЬ: Полная поддержка ESP, NoClip, Fly и любых других аддонов
--- ИЗМЕНЕНИЯ: Добавлен авто-фикс окон аддонов (защита от проваливания кликов), 
---            улучшена логика Drag & Drop, предотвращены утечки памяти.
+-- ФАЙЛ: FusionHub.lua (Ultimate Version)
+-- ОПИСАНИЕ: Главное ядро пользовательского интерфейса FusionHub
+-- СОВМЕСТИМОСТЬ: Полная поддержка существующих аддонов (ESP, NoClip, Fly)
+-- ИННОВАЦИИ: Key System, Config System, Global Transparency, Addon API
 -- =====================================================================
 
 -- =====================================================================
--- [БЛОК 1] ПОДКЛЮЧЕНИЕ СИСТЕМНЫХ СЕРВИСОВ ROBLOX
+-- [БЛОК 1] СЕРВИСЫ И ГЛОБАЛЬНОЕ API ДЛЯ АДДОНОВ
 -- =====================================================================
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
 
--- =====================================================================
--- [БЛОК 2] ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И НАСТРОЙКИ ИГРОКА
--- =====================================================================
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
--- Переменные для хранения активных соединений (циклов)
-local renderConnection = nil
-local dayConnection = nil
-local uiConnections = {} -- Для хранения эвентов интерфейса (звуки)
+-- Экспортируем глобальную таблицу, чтобы будущие аддоны могли использовать функции хаба
+_G.FusionHub = _G.FusionHub or {}
 
--- Флаги состояний меню
+-- Флаги состояний
 local isMenuOpen = false
 local isTeleporting = false
 local isDayEnabled = false
 local isSettingsOpen = false
+local isAuthenticated = false
 
--- Глобальные настройки хаба
+-- Глобальные настройки (которые будут сохраняться)
 local HubConfig = {
 	SoundEnabled = true,
-	SidebarPosition = "Left", -- "Left" или "Right"
+	SidebarPosition = "Left",
+	MenuColor = {R = 15, G = 15, B = 20},
+	BgTransparency = 0.15,
+	BtnTransparency = 0.4
 }
+local configFilename = "FusionHub_Config.json"
+
+-- Активные соединения
+local renderConnection, dayConnection = nil, nil
+local uiConnections = {} 
 
 -- =====================================================================
--- [БЛОК 3] ТАБЛИЦА СТИЛЕЙ, ЦВЕТОВ И КОНФИГУРАЦИИ ДИЗАЙНА (THEME)
+-- [БЛОК 2] КОНФИГУРАЦИЯ ДИЗАЙНА (MODERN DARK THEME)
 -- =====================================================================
 local Theme = {
-	MainBackground = Color3.fromRGB(15, 15, 20),
-	MainTransparency = 0.35,
+	StrokeColor = Color3.fromRGB(80, 80, 90),
+	StrokeActive = Color3.fromRGB(150, 255, 150),
 	
-	StrokeColor = Color3.fromRGB(255, 255, 255),
-	StrokeTransparency = 0.8,
-	StrokeThickness = 1,
-	
-	SidebarBackground = Color3.fromRGB(255, 255, 255),
-	SidebarTransparency = 0.95,
-	SidebarText = Color3.fromRGB(200, 200, 205),
-	
+	SidebarBackground = Color3.fromRGB(20, 20, 25),
 	ButtonBackground = Color3.fromRGB(30, 30, 35),
-	ButtonTransparency = 0.4,
+	ButtonHover = Color3.fromRGB(45, 45, 55),
 	ButtonActiveBg = Color3.fromRGB(35, 50, 35),
 	ButtonDangerBg = Color3.fromRGB(180, 45, 45),
 	
 	TextPrimary = Color3.fromRGB(255, 255, 255),
-	TextSecondary = Color3.fromRGB(240, 240, 245),
+	TextSecondary = Color3.fromRGB(180, 180, 185),
 	TextActive = Color3.fromRGB(150, 255, 150),
 	
 	FontPrimary = Enum.Font.GothamMedium,
 	FontBold = Enum.Font.GothamBold,
 	FontTitle = Enum.Font.GothamBlack,
 	
-	CornerRadiusMain = UDim.new(0, 16),
-	CornerRadiusSidebar = UDim.new(0, 12),
-	CornerRadiusButton = UDim.new(0, 8),
-	CornerRadiusAvatar = UDim.new(1, 0)
+	CornerRadiusMain = UDim.new(0, 12),
+	CornerRadiusButton = UDim.new(0, 8)
 }
 
 -- =====================================================================
--- [БЛОК 4] РЕЗЕРВНОЕ СОХРАНЕНИЕ ОРИГИНАЛЬНЫХ НАСТРОЕК ОКРУЖЕНИЯ
+-- [БЛОК 3] СИСТЕМА КОНФИГОВ (СОХРАНЕНИЕ / ЗАГРУЗКА)
 -- =====================================================================
-local originalLightingSettings = {
-	ClockTime = Lighting.ClockTime,
-	GlobalShadows = Lighting.GlobalShadows,
-	FogEnd = Lighting.FogEnd,
-	FogStart = Lighting.FogStart,
-	Ambient = Lighting.Ambient,
-	OutdoorAmbient = Lighting.OutdoorAmbient
-}
-
-local originalAtmospheres = {}
-for _, child in pairs(Lighting:GetChildren()) do
-	if child:IsA("Atmosphere") then
-		originalAtmospheres[child] = child.Density
+local function saveConfig()
+	if writefile then
+		pcall(function()
+			local json = HttpService:JSONEncode(HubConfig)
+			writefile(configFilename, json)
+		end)
 	end
 end
 
+local function loadConfig()
+	if isfile and isfile(configFilename) and readfile then
+		pcall(function()
+			local data = HttpService:JSONDecode(readfile(configFilename))
+			if data then
+				if data.SoundEnabled ~= nil then HubConfig.SoundEnabled = data.SoundEnabled end
+				if data.SidebarPosition then HubConfig.SidebarPosition = data.SidebarPosition end
+				if data.MenuColor then HubConfig.MenuColor = data.MenuColor end
+				if data.BgTransparency then HubConfig.BgTransparency = data.BgTransparency end
+				if data.BtnTransparency then HubConfig.BtnTransparency = data.BtnTransparency end
+			end
+		end)
+	end
+end
+
+loadConfig()
+
+-- Резервное сохранение окружения
+local originalLightingSettings = {
+	ClockTime = Lighting.ClockTime, GlobalShadows = Lighting.GlobalShadows,
+	FogEnd = Lighting.FogEnd, FogStart = Lighting.FogStart,
+	Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient
+}
+local originalAtmospheres = {}
+for _, child in pairs(Lighting:GetChildren()) do
+	if child:IsA("Atmosphere") then originalAtmospheres[child] = child.Density end
+end
+
 -- =====================================================================
--- [БЛОК 5] ИНИЦИАЛИЗАЦИЯ ИНТЕРФЕЙСА (СВЯЗУЮЩЕЕ ЗВЕНО ДЛЯ АДДОНОВ)
+-- [БЛОК 4] ИНИЦИАЛИЗАЦИЯ ИНТЕРФЕЙСА
 -- =====================================================================
 local playerGui = player:WaitForChild("PlayerGui")
-
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "FusionHubGui"
 screenGui.ResetOnSpawn = false
@@ -103,9 +118,23 @@ screenGui.IgnoreGuiInset = true
 screenGui.DisplayOrder = 9999999
 screenGui.Parent = playerGui
 
--- =====================================================================
--- [БЛОК 6] ГЛОБАЛЬНАЯ СИСТЕМА ЗВУКОВ И АВТО-ФИКС АДДОНОВ
--- =====================================================================
+-- Watermark
+local watermark = Instance.new("TextLabel")
+watermark.Name = "Watermark"
+watermark.Size = UDim2.new(0, 200, 0, 25)
+watermark.Position = UDim2.new(0, 15, 0, 15)
+watermark.BackgroundColor3 = Color3.fromRGB(HubConfig.MenuColor.R, HubConfig.MenuColor.G, HubConfig.MenuColor.B)
+watermark.BackgroundTransparency = HubConfig.BgTransparency
+watermark.Text = " FusionHub | t.me/sonlvv"
+watermark.Font = Theme.FontBold
+watermark.TextColor3 = Theme.TextPrimary
+watermark.TextSize = 12
+watermark.TextXAlignment = Enum.TextXAlignment.Left
+watermark.Parent = screenGui
+Instance.new("UICorner", watermark).CornerRadius = UDim.new(0, 6)
+Instance.new("UIStroke", watermark).Color = Theme.StrokeColor
+
+-- Звук клика
 local clickSound = Instance.new("Sound")
 clickSound.Name = "HubClickSound"
 clickSound.SoundId = "rbxassetid://139719503904449"
@@ -114,7 +143,6 @@ clickSound.Parent = screenGui
 
 local function playClickSound()
 	if HubConfig.SoundEnabled then
-		-- Клонируем звук для предотвращения прерывания при быстрых кликах
 		local s = clickSound:Clone()
 		s.Parent = screenGui
 		s:Play()
@@ -122,217 +150,211 @@ local function playClickSound()
 	end
 end
 
--- УМНАЯ СИСТЕМА: Автоматически подхватывает элементы из хаба и аддонов
+-- Логика Drag & Drop (Используется для всех окон)
+local function applyDragAndDropLogic(targetFrame)
+	targetFrame.Active = true
+	local isDragging, currentDragInput, dragStartPos, startFramePos = false, nil, nil, nil
+	local inputEndConnection
+
+	targetFrame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			isDragging = true
+			dragStartPos = input.Position
+			startFramePos = targetFrame.Position
+			if inputEndConnection then inputEndConnection:Disconnect() end
+			inputEndConnection = input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					isDragging = false
+					if inputEndConnection then inputEndConnection:Disconnect() end
+				end
+			end)
+		end
+	end)
+
+	targetFrame.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			currentDragInput = input
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if input == currentDragInput and isDragging then
+			local delta = input.Position - dragStartPos
+			TweenService:Create(targetFrame, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Position = UDim2.new(startFramePos.X.Scale, startFramePos.X.Offset + delta.X, startFramePos.Y.Scale, startFramePos.Y.Offset + delta.Y)
+			}):Play()
+		end
+	end)
+end
+
+-- =====================================================================
+-- [БЛОК 5] ГЛОБАЛЬНАЯ СИНХРОНИЗАЦИЯ СТИЛЕЙ И АВТО-ФИКС ДЛЯ АДДОНОВ
+-- =====================================================================
+local scrollFrame -- Предварительное объявление
+
+-- Функция массового обновления цветов и прозрачности
+local function updateGlobalStyles()
+	local color = Color3.fromRGB(HubConfig.MenuColor.R, HubConfig.MenuColor.G, HubConfig.MenuColor.B)
+	
+	for _, element in pairs(screenGui:GetDescendants()) do
+		-- Применяем настройки фона ко всем окнам меню и настройкам
+		if element:IsA("CanvasGroup") and (element.Name == "MainMenu" or element.Name:match("Settings")) then
+			element.BackgroundColor3 = color
+			element.BackgroundTransparency = HubConfig.BgTransparency
+		end
+		
+		-- Применяем прозрачность кнопкам внутри списка контента
+		if (element:IsA("TextButton") or element:IsA("ImageButton")) and scrollFrame and element:IsDescendantOf(scrollFrame) then
+			element.BackgroundTransparency = HubConfig.BtnTransparency
+		end
+	end
+	
+	watermark.BackgroundColor3 = color
+	watermark.BackgroundTransparency = HubConfig.BgTransparency
+	saveConfig()
+end
+
 local function autoProcessElement(element)
-	-- 1. Подключение звуков на все кнопки
+	-- Подключение звуков и эффектов наведения на новые кнопки (от аддонов)
 	if element:IsA("TextButton") or element:IsA("ImageButton") then
 		local conn = element.Activated:Connect(playClickSound)
 		table.insert(uiConnections, conn)
+		
+		local hoverConn1 = element.MouseEnter:Connect(function()
+			TweenService:Create(element, TweenInfo.new(0.2), {BackgroundColor3 = Theme.ButtonHover}):Play()
+		end)
+		local hoverConn2 = element.MouseLeave:Connect(function()
+			-- Если кнопка активна, не сбрасываем цвет полностью
+			if not element.Name:match("Toggle") or element.BackgroundColor3 ~= Theme.ButtonActiveBg then
+				TweenService:Create(element, TweenInfo.new(0.2), {
+					BackgroundColor3 = element:GetAttribute("OriginalColor") or Theme.ButtonBackground
+				}):Play()
+			end
+		end)
+		table.insert(uiConnections, hoverConn1)
+		table.insert(uiConnections, hoverConn2)
+		
+		-- Авто-применение прозрачности к кнопкам аддонов
+		if scrollFrame and element:IsDescendantOf(scrollFrame) then
+			element.BackgroundTransparency = HubConfig.BtnTransparency
+		end
 	end
 	
-	-- 2. Авто-фикс окон аддонов. Если аддон спавнит окно, делаем его Active,
-	-- чтобы клик по нему не проваливался к главному окну FusionHub (чтобы оно не тащилось следом).
 	if element:IsA("CanvasGroup") or element:IsA("ScrollingFrame") or (element:IsA("Frame") and element.Parent == screenGui) then
-		pcall(function()
-			element.Active = true
-		end)
+		pcall(function() element.Active = true end)
+		
+		-- Авто-применение цвета к окнам настроек аддонов
+		if element:IsA("CanvasGroup") and element.Name:match("Settings") then
+			element.BackgroundColor3 = Color3.fromRGB(HubConfig.MenuColor.R, HubConfig.MenuColor.G, HubConfig.MenuColor.B)
+			element.BackgroundTransparency = HubConfig.BgTransparency
+		end
 	end
 end
-
 screenGui.DescendantAdded:Connect(autoProcessElement)
 
 -- =====================================================================
--- [БЛОК 7] КНОПКА ОТКРЫТИЯ (TOGGLE)
+-- [БЛОК 6] ШАБЛОН ОКНА НАСТРОЕК (ДЛЯ ИИ И АДДОНОВ)
 -- =====================================================================
-local openBtn = Instance.new("TextButton")
-openBtn.Name = "OpenMenuButton"
-openBtn.Text = ""
-openBtn.Size = UDim2.new(0, 50, 0, 50)
-openBtn.Position = UDim2.new(0, 20, 0.5, -25)
-openBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-openBtn.BackgroundTransparency = 0.3
-openBtn.Active = true
-openBtn.Parent = screenGui
+-- ИИ-Ассистент: В будущем, при создании аддонов с настройками, используй эту функцию:
+-- local settingsAPI = _G.FusionHub.CreateAddonSettings("Fly Settings", 250, 200)
+-- settingsAPI.Window - само окно, куда можно добавлять элементы.
+-- settingsAPI.ToggleFunction - функция, которую нужно привязать к кнопке открытия (шестеренке).
+_G.FusionHub.CreateAddonSettings = function(titleText, width, height)
+	local addonMenu = Instance.new("CanvasGroup")
+	addonMenu.Name = titleText:gsub("%s+", "") .. "Settings"
+	addonMenu.Size = UDim2.new(0, width or 250, 0, height or 200)
+	addonMenu.Position = UDim2.new(0.5, 0, 0.5, 0)
+	addonMenu.BackgroundColor3 = Color3.fromRGB(HubConfig.MenuColor.R, HubConfig.MenuColor.G, HubConfig.MenuColor.B)
+	addonMenu.BackgroundTransparency = HubConfig.BgTransparency
+	addonMenu.GroupTransparency = 1
+	addonMenu.Visible = false
+	addonMenu.Parent = screenGui
+	Instance.new("UICorner", addonMenu).CornerRadius = Theme.CornerRadiusMain
+	Instance.new("UIStroke", addonMenu).Color = Theme.StrokeColor
+	
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -40, 0, 30)
+	title.Position = UDim2.new(0, 10, 0, 10)
+	title.BackgroundTransparency = 1
+	title.Text = titleText
+	title.Font = Theme.FontBold
+	title.TextColor3 = Theme.TextPrimary
+	title.TextSize = 16
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Parent = addonMenu
 
-local openBtnCorner = Instance.new("UICorner")
-openBtnCorner.CornerRadius = UDim.new(0, 15)
-openBtnCorner.Parent = openBtn
+	local closeBtn = Instance.new("TextButton")
+	closeBtn.Size = UDim2.new(0, 30, 0, 30)
+	closeBtn.Position = UDim2.new(1, -35, 0, 10)
+	closeBtn.BackgroundColor3 = Theme.ButtonDangerBg
+	closeBtn.BackgroundTransparency = 0.2
+	closeBtn.Text = "X"
+	closeBtn.Font = Theme.FontBold
+	closeBtn.TextColor3 = Theme.TextPrimary
+	closeBtn.TextSize = 14
+	closeBtn.Parent = addonMenu
+	Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
 
-local openBtnStroke = Instance.new("UIStroke")
-openBtnStroke.Color = Theme.StrokeColor
-openBtnStroke.Transparency = 0.7
-openBtnStroke.Thickness = 1.5
-openBtnStroke.Parent = openBtn
+	local isAddonMenuOpen = false
+	closeBtn.Activated:Connect(function()
+		isAddonMenuOpen = false
+		TweenService:Create(addonMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), { GroupTransparency = 1 }):Play()
+		task.delay(0.2, function() if not isAddonMenuOpen then addonMenu.Visible = false end end)
+	end)
 
-local openBtnIcon = Instance.new("ImageLabel")
-openBtnIcon.Name = "Icon"
-openBtnIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
-openBtnIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
-openBtnIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-openBtnIcon.BackgroundTransparency = 1
-openBtnIcon.Image = "rbxthumb://type=Asset&id=101596398409097&w=150&h=150"
-openBtnIcon.Parent = openBtn
+	applyDragAndDropLogic(addonMenu)
+
+	return {
+		Window = addonMenu,
+		CloseBtn = closeBtn,
+		ToggleFunction = function()
+			isAddonMenuOpen = not isAddonMenuOpen
+			if isAddonMenuOpen then
+				addonMenu.Visible = true
+				TweenService:Create(addonMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), { GroupTransparency = 0 }):Play()
+			else
+				TweenService:Create(addonMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), { GroupTransparency = 1 }):Play()
+				task.delay(0.2, function() if not isAddonMenuOpen then addonMenu.Visible = false end end)
+			end
+		end
+	}
+end
 
 -- =====================================================================
--- [БЛОК 8] ОСНОВНОЕ ОКНО (MAIN MENU CANVAS)
+-- [БЛОК 7] ОСНОВНОЕ ОКНО HUB'А (ДЛЯ СОВМЕСТИМОСТИ СОЗДАЕТСЯ СРАЗУ)
 -- =====================================================================
 local menuGroup = Instance.new("CanvasGroup")
-menuGroup.Name = "MainMenu"
+menuGroup.Name = "MainMenu" -- Имя не менять! Важно для аддонов.
 menuGroup.Size = UDim2.new(0, 680, 0, 450)
 menuGroup.Position = UDim2.new(0.5, -340, 0.5, -225)
-menuGroup.BackgroundColor3 = Theme.MainBackground
-menuGroup.BackgroundTransparency = Theme.MainTransparency
+menuGroup.BackgroundColor3 = Color3.fromRGB(HubConfig.MenuColor.R, HubConfig.MenuColor.G, HubConfig.MenuColor.B)
+menuGroup.BackgroundTransparency = HubConfig.BgTransparency
 menuGroup.GroupTransparency = 1
-menuGroup.Active = true -- Предотвращает клики сквозь меню
-menuGroup.Visible = false
+menuGroup.Active = true
+menuGroup.Visible = false -- Скрыто до ввода ключа
 menuGroup.Parent = screenGui
 
-local menuCorner = Instance.new("UICorner")
-menuCorner.CornerRadius = Theme.CornerRadiusMain
-menuCorner.Parent = menuGroup
-
-local menuStroke = Instance.new("UIStroke")
-menuStroke.Color = Theme.StrokeColor
-menuStroke.Transparency = Theme.StrokeTransparency
-menuStroke.Thickness = Theme.StrokeThickness
-menuStroke.Parent = menuGroup
-
-local uiScale = Instance.new("UIScale")
+Instance.new("UICorner", menuGroup).CornerRadius = Theme.CornerRadiusMain
+Instance.new("UIStroke", menuGroup).Color = Theme.StrokeColor
+local uiScale = Instance.new("UIScale", menuGroup)
 uiScale.Scale = 0.9
-uiScale.Parent = menuGroup
 
--- =====================================================================
--- [БЛОК 9] БОКОВАЯ ПАНЕЛЬ ИНФОРМАЦИИ (SIDEBAR)
--- =====================================================================
 local sidebar = Instance.new("Frame")
 sidebar.Name = "Sidebar"
 sidebar.Size = UDim2.new(0, 180, 1, -20)
-sidebar.Position = UDim2.new(0, 10, 0, 10)
+sidebar.Position = HubConfig.SidebarPosition == "Left" and UDim2.new(0, 10, 0, 10) or UDim2.new(1, -190, 0, 10)
 sidebar.BackgroundColor3 = Theme.SidebarBackground
-sidebar.BackgroundTransparency = Theme.SidebarTransparency 
+sidebar.BackgroundTransparency = 0.5 
 sidebar.Parent = menuGroup
+Instance.new("UICorner", sidebar).CornerRadius = Theme.CornerRadiusMain
 
-local sidebarCorner = Instance.new("UICorner")
-sidebarCorner.CornerRadius = Theme.CornerRadiusSidebar
-sidebarCorner.Parent = sidebar
-
-local sidebarStroke = Instance.new("UIStroke")
-sidebarStroke.Color = Theme.StrokeColor
-sidebarStroke.Transparency = 0.9
-sidebarStroke.Parent = sidebar
-
-local function createMetricLabel(name, positionY)
-	local label = Instance.new("TextLabel")
-	label.Name = name
-	label.Size = UDim2.new(1, -30, 0, 25)
-	label.Position = UDim2.new(0, 15, 0, positionY)
-	label.BackgroundTransparency = 1
-	label.Font = Theme.FontPrimary
-	label.TextColor3 = Theme.SidebarText
-	label.TextSize = 13
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.Parent = sidebar
-	return label
-end
-
-local fpsLabel = createMetricLabel("FPSLabel", 20)
-local pingLabel = createMetricLabel("PingLabel", 50)
-local onlineLabel = createMetricLabel("OnlineLabel", 80)
-
-local profileView = Instance.new("Frame")
-profileView.Name = "ProfileContainer"
-profileView.Size = UDim2.new(1, 0, 0, 60)
-profileView.Position = UDim2.new(0, 0, 1, -70)
-profileView.BackgroundTransparency = 1
-profileView.Parent = sidebar
-
-local userAvatar = Instance.new("ImageLabel")
-userAvatar.Name = "AvatarImage"
-userAvatar.Size = UDim2.new(0, 36, 0, 36)
-userAvatar.Position = UDim2.new(0, 15, 0.5, -18)
-userAvatar.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-userAvatar.BackgroundTransparency = 0.5
-
-pcall(function()
-	userAvatar.Image = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
-end)
-userAvatar.Parent = profileView
-
-local avatarRound = Instance.new("UICorner")
-avatarRound.CornerRadius = Theme.CornerRadiusAvatar
-avatarRound.Parent = userAvatar
-
-local usernameText = Instance.new("TextLabel")
-usernameText.Name = "PlayerName"
-usernameText.Size = UDim2.new(1, -65, 0, 36)
-usernameText.Position = UDim2.new(0, 60, 0.5, -18)
-usernameText.BackgroundTransparency = 1
-usernameText.Font = Theme.FontBold
-usernameText.TextColor3 = Theme.TextPrimary
-usernameText.TextSize = 14
-usernameText.Text = player.DisplayName
-usernameText.TextXAlignment = Enum.TextXAlignment.Left
-usernameText.TextYAlignment = Enum.TextYAlignment.Center
-usernameText.TextTruncate = Enum.TextTruncate.AtEnd
-usernameText.Parent = profileView
-
--- =====================================================================
--- [БЛОК 10] ЛОГОТИП И НАЗВАНИЕ ХАБА (HEADER TITLE)
--- =====================================================================
-local hubTitle = Instance.new("TextLabel")
-hubTitle.Name = "Title"
-hubTitle.Text = "FusionHub"
-hubTitle.Size = UDim2.new(1, -220, 0, 50)
-hubTitle.Position = UDim2.new(0, 210, 0, 15)
-hubTitle.BackgroundTransparency = 1
-hubTitle.Font = Theme.FontTitle
-hubTitle.TextSize = 28
-hubTitle.TextColor3 = Theme.TextPrimary
-hubTitle.TextXAlignment = Enum.TextXAlignment.Left
-hubTitle.Parent = menuGroup
-
-local titleGradient = Instance.new("UIGradient")
-titleGradient.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 150, 170))
-})
-titleGradient.Parent = hubTitle
-
--- Кнопка Настроек (Шестеренка) в заголовке
-local mainSettingsBtn = Instance.new("ImageButton")
-mainSettingsBtn.Name = "MainSettingsButton"
-mainSettingsBtn.Size = UDim2.new(0, 35, 0, 35)
-mainSettingsBtn.Position = UDim2.new(1, -45, 0, 20)
-mainSettingsBtn.BackgroundColor3 = Theme.ButtonBackground
-mainSettingsBtn.BackgroundTransparency = Theme.ButtonTransparency
-mainSettingsBtn.AutoButtonColor = true
-mainSettingsBtn.Parent = menuGroup
-
-local mainSettingsCorner = Instance.new("UICorner")
-mainSettingsCorner.CornerRadius = UDim.new(0, 8)
-mainSettingsCorner.Parent = mainSettingsBtn
-
-local mainSettingsIcon = Instance.new("ImageLabel")
-mainSettingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
-mainSettingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
-mainSettingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-mainSettingsIcon.BackgroundTransparency = 1
-mainSettingsIcon.Image = "rbxassetid://9405931578"
-mainSettingsIcon.Parent = mainSettingsBtn
-
--- =====================================================================
--- [БЛОК 11] ДИНАМИЧЕСКИЙ СКРОЛЛ-ФРЕЙМ ДЛЯ КНОПОК И АДДОНОВ
--- =====================================================================
-local scrollFrame = Instance.new("ScrollingFrame")
-scrollFrame.Name = "ContentScroll"
+scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Name = "ContentScroll" -- Имя не менять! Важно для аддонов.
 scrollFrame.Size = UDim2.new(1, -230, 1, -90)
-scrollFrame.Position = UDim2.new(0, 210, 0, 75)
+scrollFrame.Position = HubConfig.SidebarPosition == "Left" and UDim2.new(0, 210, 0, 75) or UDim2.new(0, 20, 0, 75)
 scrollFrame.BackgroundTransparency = 1
 scrollFrame.BorderSizePixel = 0
 scrollFrame.ScrollBarThickness = 4
-scrollFrame.ScrollBarImageColor3 = Theme.TextPrimary
-scrollFrame.ScrollBarImageTransparency = 0.5
-scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 scrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 scrollFrame.Parent = menuGroup
 
@@ -342,189 +364,263 @@ scrollLayout.Padding = UDim.new(0, 8)
 scrollLayout.Parent = scrollFrame
 
 -- =====================================================================
--- [БЛОК 12] СИСТЕМА УПРАВЛЕНИЯ ПЛАВНОЙ АНИМАЦИЕЙ
+-- [БЛОК 8] СИСТЕМА АВТОРИЗАЦИИ (KEY SYSTEM)
 -- =====================================================================
-local function playMenuCloseAnimation()
-	isMenuOpen = false
-	local fadeInfo = TweenInfo.new(0.25, Enum.EasingStyle.Cubic, Enum.EasingDirection.In)
-	local fadeTween = TweenService:Create(menuGroup, fadeInfo, { GroupTransparency = 1 })
-	local scaleTween = TweenService:Create(uiScale, fadeInfo, { Scale = 0.95 })
-	
-	scaleTween:Play()
-	fadeTween:Play()
-	fadeTween.Completed:Wait()
-	
-	if not isMenuOpen then menuGroup.Visible = false end
-end
+local keySystemGroup = Instance.new("CanvasGroup")
+keySystemGroup.Name = "KeySystem"
+keySystemGroup.Size = UDim2.new(0, 350, 0, 220)
+keySystemGroup.Position = UDim2.new(0.5, -175, 0.5, -110)
+keySystemGroup.BackgroundColor3 = Color3.fromRGB(HubConfig.MenuColor.R, HubConfig.MenuColor.G, HubConfig.MenuColor.B)
+keySystemGroup.BackgroundTransparency = HubConfig.BgTransparency
+keySystemGroup.Parent = screenGui
+Instance.new("UICorner", keySystemGroup).CornerRadius = Theme.CornerRadiusMain
+local keyStroke = Instance.new("UIStroke", keySystemGroup)
+keyStroke.Color = Theme.StrokeColor
 
--- =====================================================================
--- [БЛОК 13] ФАБРИКА СБОРКИ СТАНДАРТНЫХ ИНТЕРАКТИВНЫХ КНОПОК
--- =====================================================================
-local function createHubFeatureButton(id, titleText, order, customBg)
-	local button = Instance.new("TextButton")
-	button.Name = id
-	button.Size = UDim2.new(1, -15, 0, 45)
-	button.BackgroundColor3 = customBg or Theme.ButtonBackground
-	button.BackgroundTransparency = Theme.ButtonTransparency
-	button.Text = ""
-	button.AutoButtonColor = true
-	button.LayoutOrder = order
-	button.Parent = scrollFrame
+local keyTitle = Instance.new("TextLabel")
+keyTitle.Size = UDim2.new(1, 0, 0, 40)
+keyTitle.BackgroundTransparency = 1
+keyTitle.Text = "Authentication Required"
+keyTitle.Font = Theme.FontTitle
+keyTitle.TextColor3 = Theme.TextPrimary
+keyTitle.TextSize = 18
+keyTitle.Parent = keySystemGroup
 
-	local buttonCorner = Instance.new("UICorner")
-	buttonCorner.CornerRadius = Theme.CornerRadiusButton
-	buttonCorner.Parent = button
+local keyInput = Instance.new("TextBox")
+keyInput.Size = UDim2.new(1, -40, 0, 40)
+keyInput.Position = UDim2.new(0, 20, 0, 60)
+keyInput.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+keyInput.PlaceholderText = "Enter Access Key..."
+keyInput.Text = ""
+keyInput.Font = Theme.FontPrimary
+keyInput.TextColor3 = Theme.TextPrimary
+keyInput.TextSize = 14
+keyInput.Parent = keySystemGroup
+Instance.new("UICorner", keyInput).CornerRadius = Theme.CornerRadiusButton
 
-	local textContainer = Instance.new("TextLabel")
-	textContainer.Name = "ButtonLabel"
-	textContainer.Size = UDim2.new(1, -20, 1, 0)
-	textContainer.Position = UDim2.new(0, 10, 0, 0)
-	textContainer.BackgroundTransparency = 1
-	textContainer.Text = titleText
-	textContainer.Font = Theme.FontPrimary
-	textContainer.TextColor3 = Theme.TextPrimary
-	textContainer.TextSize = 14
-	textContainer.TextXAlignment = Enum.TextXAlignment.Left
-	textContainer.Parent = button
-	
-	return button, textContainer
-end
+local getKeyBtn = Instance.new("TextButton")
+getKeyBtn.Size = UDim2.new(0.4, 0, 0, 40)
+getKeyBtn.Position = UDim2.new(0, 20, 0, 120)
+getKeyBtn.BackgroundColor3 = Theme.ButtonBackground
+getKeyBtn.Text = "Get Key"
+getKeyBtn.Font = Theme.FontBold
+getKeyBtn.TextColor3 = Theme.TextPrimary
+getKeyBtn.TextSize = 14
+getKeyBtn.Parent = keySystemGroup
+Instance.new("UICorner", getKeyBtn).CornerRadius = Theme.CornerRadiusButton
 
--- =====================================================================
--- [ФУНКЦИЯ 1] ОТКЛЮЧЕНИЕ СКРИПТА
--- =====================================================================
-local exitButton, exitButtonText = createHubFeatureButton("DestroyButton", "Disable HUB", 1, Theme.ButtonDangerBg)
+local checkKeyBtn = Instance.new("TextButton")
+checkKeyBtn.Size = UDim2.new(0.4, 0, 0, 40)
+checkKeyBtn.Position = UDim2.new(1, -160, 0, 120)
+checkKeyBtn.BackgroundColor3 = Theme.ButtonActiveBg
+checkKeyBtn.Text = "Verify"
+checkKeyBtn.Font = Theme.FontBold
+checkKeyBtn.TextColor3 = Theme.TextPrimary
+checkKeyBtn.TextSize = 14
+checkKeyBtn.Parent = keySystemGroup
+Instance.new("UICorner", checkKeyBtn).CornerRadius = Theme.CornerRadiusButton
 
-exitButton.MouseButton1Click:Connect(function()
-	if renderConnection then renderConnection:Disconnect() end
-	if dayConnection then dayConnection:Disconnect() end
-	for _, conn in pairs(uiConnections) do conn:Disconnect() end
-	
-	Lighting.ClockTime = originalLightingSettings.ClockTime
-	Lighting.GlobalShadows = originalLightingSettings.GlobalShadows
-	Lighting.FogEnd = originalLightingSettings.FogEnd
-	Lighting.FogStart = originalLightingSettings.FogStart
-	Lighting.Ambient = originalLightingSettings.Ambient
-	Lighting.OutdoorAmbient = originalLightingSettings.OutdoorAmbient
-	
-	for element, densityValue in pairs(originalAtmospheres) do
-		if element and element.Parent then element.Density = densityValue end
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, 0, 0, 30)
+statusLabel.Position = UDim2.new(0, 0, 1, -35)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = ""
+statusLabel.Font = Theme.FontPrimary
+statusLabel.TextColor3 = Theme.ButtonDangerBg
+statusLabel.TextSize = 12
+statusLabel.Parent = keySystemGroup
+
+applyDragAndDropLogic(keySystemGroup)
+
+-- Зашифрованный ключ ("family" в байтах)
+local obfuscatedKeyBytes = {102, 97, 109, 105, 108, 121}
+
+local function verifyKey(input)
+	local str = string.lower(input)
+	if #str ~= #obfuscatedKeyBytes then return false end
+	for i = 1, #obfuscatedKeyBytes do
+		if string.byte(string.sub(str, i, i)) ~= obfuscatedKeyBytes[i] then return false end
 	end
-	
-	screenGui:Destroy()
-end)
+	return true
+end
 
--- =====================================================================
--- [ФУНКЦИЯ 2] ТЕЛЕПОРТАЦИЯ
--- =====================================================================
-local teleportButton, teleportButtonText = createHubFeatureButton("ClickTeleportButton", "Click Teleport", 2)
-
-teleportButton.MouseButton1Click:Connect(function()
-	if isTeleporting then return end
-	isTeleporting = true
-	task.spawn(playMenuCloseAnimation)
-	
-	local defaultCursor = mouse.Icon
-	mouse.Icon = "rbxasset://textures/GunCursor.png"
-	
-	local mouseClickSignal
-	mouseClickSignal = mouse.Button1Down:Connect(function()
-		mouseClickSignal:Disconnect()
-		local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-		if rootPart then
-			rootPart.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
-		end
-		mouse.Icon = defaultCursor
-		isTeleporting = false
-	end)
-end)
-
--- =====================================================================
--- [ФУНКЦИЯ 3] УЛУЧШЕННЫЙ FULLBRIGHT (ПОЛНОЕ ОТСУТСТВИЕ ТЕНЕЙ)
--- =====================================================================
-local weatherButton, weatherButtonText = createHubFeatureButton("DayToggleButton", "Fullbright: OFF", 3)
-weatherButtonText.TextColor3 = Theme.TextSecondary
-
-weatherButton.MouseButton1Click:Connect(function()
-	isDayEnabled = not isDayEnabled
-	
-	if isDayEnabled then
-		weatherButtonText.Text = "Fullbright: ON"
-		weatherButtonText.TextColor3 = Theme.TextActive
-		weatherButton.BackgroundColor3 = Theme.ButtonActiveBg
-		
-		dayConnection = RunService.Heartbeat:Connect(function()
-			Lighting.ClockTime = 12
-			Lighting.GlobalShadows = false
-			Lighting.FogEnd = 1000000
-			Lighting.FogStart = 1000000
-			
-			-- Полная яркость без теней и смещения цвета
-			Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-			Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-			
-			for _, child in pairs(Lighting:GetChildren()) do
-				if child:IsA("Atmosphere") then
-					child.Density = 0
-				end
-			end
-		end)
+getKeyBtn.Activated:Connect(function()
+	if setclipboard then
+		setclipboard("https://t.me/sonlvv/5")
+		statusLabel.TextColor3 = Theme.TextPrimary
+		statusLabel.Text = "Link copied to clipboard!"
 	else
-		weatherButtonText.Text = "Fullbright: OFF"
-		weatherButtonText.TextColor3 = Theme.TextSecondary
-		weatherButton.BackgroundColor3 = Theme.ButtonBackground
+		statusLabel.TextColor3 = Theme.ButtonDangerBg
+		statusLabel.Text = "Executor does not support clipboard."
+	end
+end)
+
+checkKeyBtn.Activated:Connect(function()
+	if verifyKey(keyInput.Text) then
+		statusLabel.TextColor3 = Theme.TextActive
+		statusLabel.Text = "Access Granted! Loading..."
+		keyStroke.Color = Theme.TextActive
 		
-		if dayConnection then
-			dayConnection:Disconnect()
-			dayConnection = nil
-		end
+		task.wait(0.5)
+		local tweenOut = TweenService:Create(keySystemGroup, TweenInfo.new(0.5, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
+			GroupTransparency = 1, Size = UDim2.new(0, 300, 0, 180)
+		})
+		tweenOut:Play()
+		tweenOut.Completed:Wait()
+		keySystemGroup:Destroy()
 		
-		Lighting.ClockTime = originalLightingSettings.ClockTime
-		Lighting.GlobalShadows = originalLightingSettings.GlobalShadows
-		Lighting.FogEnd = originalLightingSettings.FogEnd
-		Lighting.FogStart = originalLightingSettings.FogStart
-		Lighting.Ambient = originalLightingSettings.Ambient
-		Lighting.OutdoorAmbient = originalLightingSettings.OutdoorAmbient
-		
-		for element, density in pairs(originalAtmospheres) do
-			if element and element.Parent then element.Density = density end
-		end
+		isAuthenticated = true
+		isMenuOpen = true
+		menuGroup.Visible = true
+		TweenService:Create(menuGroup, TweenInfo.new(0.6, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), { GroupTransparency = 0 }):Play()
+		TweenService:Create(uiScale, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 }):Play()
+	else
+		statusLabel.TextColor3 = Theme.ButtonDangerBg
+		statusLabel.Text = "Invalid Key. Try again."
+		keyStroke.Color = Theme.ButtonDangerBg
+		task.delay(1.5, function() if keyStroke then keyStroke.Color = Theme.StrokeColor end end)
 	end
 end)
 
 -- =====================================================================
--- [БЛОК 14] МЕНЮ НАСТРОЕК (SETTINGS)
+-- [БЛОК 9] НАПОЛНЕНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- =====================================================================
+local function createMetricLabel(name, positionY)
+	local label = Instance.new("TextLabel")
+	label.Name = name
+	label.Size = UDim2.new(1, -30, 0, 25)
+	label.Position = UDim2.new(0, 15, 0, positionY)
+	label.BackgroundTransparency = 1
+	label.Font = Theme.FontPrimary
+	label.TextColor3 = Theme.TextSecondary
+	label.TextSize = 13
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = sidebar
+	return label
+end
+local fpsLabel = createMetricLabel("FPSLabel", 20)
+local pingLabel = createMetricLabel("PingLabel", 50)
+local onlineLabel = createMetricLabel("OnlineLabel", 80)
+
+local profileView = Instance.new("Frame")
+profileView.Size = UDim2.new(1, 0, 0, 60)
+profileView.Position = UDim2.new(0, 0, 1, -70)
+profileView.BackgroundTransparency = 1
+profileView.Parent = sidebar
+
+local userAvatar = Instance.new("ImageLabel")
+userAvatar.Size = UDim2.new(0, 36, 0, 36)
+userAvatar.Position = UDim2.new(0, 15, 0.5, -18)
+userAvatar.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+userAvatar.BackgroundTransparency = 0.5
+pcall(function()
+	userAvatar.Image = Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+end)
+userAvatar.Parent = profileView
+Instance.new("UICorner", userAvatar).CornerRadius = UDim.new(1, 0)
+
+local usernameText = Instance.new("TextLabel")
+usernameText.Size = UDim2.new(1, -65, 0, 36)
+usernameText.Position = UDim2.new(0, 60, 0.5, -18)
+usernameText.BackgroundTransparency = 1
+usernameText.Font = Theme.FontBold
+usernameText.TextColor3 = Theme.TextPrimary
+usernameText.TextSize = 14
+usernameText.Text = player.DisplayName
+usernameText.TextXAlignment = Enum.TextXAlignment.Left
+usernameText.TextTruncate = Enum.TextTruncate.AtEnd
+usernameText.Parent = profileView
+
+local hubTitle = Instance.new("TextLabel")
+hubTitle.Text = "FusionHub"
+hubTitle.Size = UDim2.new(1, -220, 0, 50)
+hubTitle.Position = HubConfig.SidebarPosition == "Left" and UDim2.new(0, 210, 0, 15) or UDim2.new(0, 20, 0, 15)
+hubTitle.BackgroundTransparency = 1
+hubTitle.Font = Theme.FontTitle
+hubTitle.TextSize = 28
+hubTitle.TextColor3 = Theme.TextPrimary
+hubTitle.TextXAlignment = Enum.TextXAlignment.Left
+hubTitle.Parent = menuGroup
+
+local titleGradient = Instance.new("UIGradient", hubTitle)
+titleGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 150, 170))
+})
+
+local mainSettingsBtn = Instance.new("ImageButton")
+mainSettingsBtn.Size = UDim2.new(0, 35, 0, 35)
+mainSettingsBtn.Position = HubConfig.SidebarPosition == "Left" and UDim2.new(1, -45, 0, 20) or UDim2.new(1, -235, 0, 20)
+mainSettingsBtn.BackgroundColor3 = Theme.ButtonBackground
+mainSettingsBtn.AutoButtonColor = true
+mainSettingsBtn.Parent = menuGroup
+Instance.new("UICorner", mainSettingsBtn).CornerRadius = Theme.CornerRadiusButton
+local mainSettingsIcon = Instance.new("ImageLabel", mainSettingsBtn)
+mainSettingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+mainSettingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+mainSettingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+mainSettingsIcon.BackgroundTransparency = 1
+mainSettingsIcon.Image = "rbxassetid://9405931578"
+
+local openBtn = Instance.new("TextButton")
+openBtn.Size = UDim2.new(0, 50, 0, 50)
+openBtn.Position = UDim2.new(0, 20, 0.5, -25)
+openBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+openBtn.BackgroundTransparency = 0.3
+openBtn.Text = ""
+openBtn.Parent = screenGui
+Instance.new("UICorner", openBtn).CornerRadius = UDim.new(0, 15)
+Instance.new("UIStroke", openBtn).Color = Theme.StrokeColor
+local openBtnIcon = Instance.new("ImageLabel", openBtn)
+openBtnIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+openBtnIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+openBtnIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+openBtnIcon.BackgroundTransparency = 1
+openBtnIcon.Image = "rbxthumb://type=Asset&id=101596398409097&w=150&h=150"
+
+-- =====================================================================
+-- [БЛОК 10] МЕНЮ НАСТРОЕК ХАБА
 -- =====================================================================
 local settingsMenu = Instance.new("CanvasGroup")
-settingsMenu.Name = "SettingsPanel"
-settingsMenu.Size = UDim2.new(0, 260, 0, 310)
-settingsMenu.Position = UDim2.new(0.5, 360, 0.5, -155)
-settingsMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-settingsMenu.BackgroundTransparency = 0.1
+settingsMenu.Name = "HubSettingsMenu"
+settingsMenu.Size = UDim2.new(0, 260, 0, 350)
+settingsMenu.Position = UDim2.new(0.5, 360, 0.5, -175)
+settingsMenu.BackgroundColor3 = Color3.fromRGB(HubConfig.MenuColor.R, HubConfig.MenuColor.G, HubConfig.MenuColor.B)
+settingsMenu.BackgroundTransparency = HubConfig.BgTransparency
 settingsMenu.GroupTransparency = 1
-settingsMenu.Active = true -- Защита от кликов сквозь настройки
 settingsMenu.Visible = false
 settingsMenu.Parent = screenGui
-
-local settingsMenuCorner = Instance.new("UICorner")
-settingsMenuCorner.CornerRadius = UDim.new(0, 12)
-settingsMenuCorner.Parent = settingsMenu
-
-local settingsMenuStroke = Instance.new("UIStroke")
-settingsMenuStroke.Color = Color3.fromRGB(255, 255, 255)
-settingsMenuStroke.Transparency = 0.8
-settingsMenuStroke.Thickness = 1
-settingsMenuStroke.Parent = settingsMenu
+Instance.new("UICorner", settingsMenu).CornerRadius = Theme.CornerRadiusMain
+Instance.new("UIStroke", settingsMenu).Color = Theme.StrokeColor
 
 local settingsTitle = Instance.new("TextLabel")
-settingsTitle.Size = UDim2.new(1, 0, 0, 30)
-settingsTitle.Position = UDim2.new(0, 0, 0, 10)
+settingsTitle.Size = UDim2.new(1, -40, 0, 30)
+settingsTitle.Position = UDim2.new(0, 10, 0, 10)
 settingsTitle.BackgroundTransparency = 1
 settingsTitle.Text = "Hub Settings"
 settingsTitle.Font = Theme.FontBold
-settingsTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+settingsTitle.TextColor3 = Theme.TextPrimary
 settingsTitle.TextSize = 16
+settingsTitle.TextXAlignment = Enum.TextXAlignment.Left
 settingsTitle.Parent = settingsMenu
+
+local closeSettingsBtn = Instance.new("TextButton")
+closeSettingsBtn.Size = UDim2.new(0, 30, 0, 30)
+closeSettingsBtn.Position = UDim2.new(1, -35, 0, 10)
+closeSettingsBtn.BackgroundColor3 = Theme.ButtonDangerBg
+closeSettingsBtn.BackgroundTransparency = 0.2
+closeSettingsBtn.Text = "X"
+closeSettingsBtn.Font = Theme.FontBold
+closeSettingsBtn.TextColor3 = Theme.TextPrimary
+closeSettingsBtn.TextSize = 14
+closeSettingsBtn.Parent = settingsMenu
+Instance.new("UICorner", closeSettingsBtn).CornerRadius = UDim.new(0, 6)
+
+closeSettingsBtn.Activated:Connect(function()
+	isSettingsOpen = false
+	TweenService:Create(settingsMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), { GroupTransparency = 1 }):Play()
+	task.delay(0.2, function() if not isSettingsOpen then settingsMenu.Visible = false end end)
+end)
 
 local function createSettingLabel(text, yPos)
 	local lbl = Instance.new("TextLabel")
@@ -533,21 +629,21 @@ local function createSettingLabel(text, yPos)
 	lbl.BackgroundTransparency = 1
 	lbl.Text = text
 	lbl.Font = Theme.FontPrimary
-	lbl.TextColor3 = Color3.fromRGB(200, 200, 205)
+	lbl.TextColor3 = Theme.TextSecondary
 	lbl.TextSize = 13
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
 	lbl.Parent = settingsMenu
 end
 
--- 1) Переключатель позиции Sidebar
+-- ПОЗИЦИЯ
 createSettingLabel("Sidebar Position:", 50)
 local posToggleBtn = Instance.new("TextButton")
 posToggleBtn.Size = UDim2.new(1, -20, 0, 30)
 posToggleBtn.Position = UDim2.new(0, 10, 0, 75)
 posToggleBtn.BackgroundColor3 = Theme.ButtonBackground
-posToggleBtn.Text = "Left (Default)"
+posToggleBtn.Text = HubConfig.SidebarPosition == "Left" and "Left (Default)" or "Right"
 posToggleBtn.Font = Theme.FontBold
-posToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+posToggleBtn.TextColor3 = Theme.TextPrimary
 posToggleBtn.TextSize = 12
 posToggleBtn.Parent = settingsMenu
 Instance.new("UICorner", posToggleBtn).CornerRadius = UDim.new(0, 6)
@@ -568,81 +664,44 @@ posToggleBtn.Activated:Connect(function()
 		hubTitle.Position = UDim2.new(0, 210, 0, 15)
 		mainSettingsBtn.Position = UDim2.new(1, -45, 0, 20)
 	end
+	saveConfig()
 end)
 
--- 2) Настройка размера меню
-createSettingLabel("Menu Size Preset:", 115)
-local sizeFrame = Instance.new("Frame")
-sizeFrame.Size = UDim2.new(1, -20, 0, 30)
-sizeFrame.Position = UDim2.new(0, 10, 0, 140)
-sizeFrame.BackgroundTransparency = 1
-sizeFrame.Parent = settingsMenu
-
-local sizeLayout = Instance.new("UIListLayout")
-sizeLayout.FillDirection = Enum.FillDirection.Horizontal
-sizeLayout.Padding = UDim.new(0, 5)
-sizeLayout.Parent = sizeFrame
-
-local function createSizeBtn(text, width, height)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 76, 1, 0)
-	btn.BackgroundColor3 = Theme.ButtonBackground
-	btn.Text = text
-	btn.Font = Theme.FontBold
-	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btn.TextSize = 12
-	btn.Parent = sizeFrame
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-	
-	btn.Activated:Connect(function()
-		TweenService:Create(menuGroup, TweenInfo.new(0.3, Enum.EasingStyle.Cubic), {
-			Size = UDim2.new(0, width, 0, height)
-		}):Play()
-	end)
-end
-createSizeBtn("Small", 550, 350)
-createSizeBtn("Normal", 680, 450)
-createSizeBtn("Large", 800, 600)
-
--- 3) Настройка цвета меню (RGB)
-createSettingLabel("Menu RGB Color:", 180)
+-- RGB НАСТРОЙКА
+createSettingLabel("Menu RGB Color:", 115)
 local rgbFrame = Instance.new("Frame")
 rgbFrame.Size = UDim2.new(1, -20, 0, 30)
-rgbFrame.Position = UDim2.new(0, 10, 0, 205)
+rgbFrame.Position = UDim2.new(0, 10, 0, 140)
 rgbFrame.BackgroundTransparency = 1
 rgbFrame.Parent = settingsMenu
-
-local rgbLayout = Instance.new("UIListLayout")
+local rgbLayout = Instance.new("UIListLayout", rgbFrame)
 rgbLayout.FillDirection = Enum.FillDirection.Horizontal
 rgbLayout.Padding = UDim.new(0, 5)
-rgbLayout.Parent = rgbFrame
 
-local function createRgbBox(ph)
+local function createRgbBox(ph, startVal)
 	local box = Instance.new("TextBox")
 	box.Size = UDim2.new(0, 50, 1, 0)
 	box.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-	box.Text = ""
+	box.Text = tostring(startVal)
 	box.PlaceholderText = ph
 	box.Font = Theme.FontBold
-	box.TextColor3 = Color3.fromRGB(255, 255, 255)
+	box.TextColor3 = Theme.TextPrimary
 	box.TextSize = 13
 	box.Parent = rgbFrame
 	Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
-	local s = Instance.new("UIStroke", box)
-	s.Color = Color3.fromRGB(100, 100, 110)
-	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	Instance.new("UIStroke", box).Color = Theme.StrokeColor
 	return box
 end
-local rBox = createRgbBox("R")
-local gBox = createRgbBox("G")
-local bBox = createRgbBox("B")
+local rBox = createRgbBox("R", HubConfig.MenuColor.R)
+local gBox = createRgbBox("G", HubConfig.MenuColor.G)
+local bBox = createRgbBox("B", HubConfig.MenuColor.B)
 
 local applyColorBtn = Instance.new("TextButton")
 applyColorBtn.Size = UDim2.new(0, 75, 1, 0)
 applyColorBtn.BackgroundColor3 = Color3.fromRGB(45, 120, 45)
 applyColorBtn.Text = "Apply"
 applyColorBtn.Font = Theme.FontBold
-applyColorBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+applyColorBtn.TextColor3 = Theme.TextPrimary
 applyColorBtn.TextSize = 12
 applyColorBtn.Parent = rgbFrame
 Instance.new("UICorner", applyColorBtn).CornerRadius = UDim.new(0, 6)
@@ -651,153 +710,91 @@ applyColorBtn.Activated:Connect(function()
 	local r = math.clamp(tonumber(rBox.Text) or 15, 0, 255)
 	local g = math.clamp(tonumber(gBox.Text) or 15, 0, 255)
 	local b = math.clamp(tonumber(bBox.Text) or 20, 0, 255)
-	menuGroup.BackgroundColor3 = Color3.fromRGB(r, g, b)
+	HubConfig.MenuColor = {R = r, G = g, B = b}
+	updateGlobalStyles()
 end)
 
--- 4) Переключатель звука кнопок
-createSettingLabel("Click Sounds:", 245)
+-- ПРОЗРАЧНОСТЬ
+createSettingLabel("Transparency (BG / Buttons):", 185)
+local transpFrame = Instance.new("Frame")
+transpFrame.Size = UDim2.new(1, -20, 0, 30)
+transpFrame.Position = UDim2.new(0, 10, 0, 210)
+transpFrame.BackgroundTransparency = 1
+transpFrame.Parent = settingsMenu
+local transpLayout = Instance.new("UIListLayout", transpFrame)
+transpLayout.FillDirection = Enum.FillDirection.Horizontal
+transpLayout.Padding = UDim.new(0, 10)
+
+local function createTranspBox(ph, startVal, isBg)
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(0.5, -5, 1, 0)
+	box.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+	box.Text = tostring(startVal)
+	box.PlaceholderText = ph
+	box.Font = Theme.FontBold
+	box.TextColor3 = Theme.TextPrimary
+	box.TextSize = 13
+	box.Parent = transpFrame
+	Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
+	Instance.new("UIStroke", box).Color = Theme.StrokeColor
+	
+	box.FocusLost:Connect(function()
+		local val = math.clamp(tonumber(box.Text) or startVal, 0, 1)
+		box.Text = tostring(val)
+		if isBg then HubConfig.BgTransparency = val else HubConfig.BtnTransparency = val end
+		updateGlobalStyles()
+	end)
+end
+createTranspBox("BG (0-1)", HubConfig.BgTransparency, true)
+createTranspBox("Btn (0-1)", HubConfig.BtnTransparency, false)
+
+-- ЗВУКИ
+createSettingLabel("Click Sounds:", 255)
 local soundToggleBtn = Instance.new("TextButton")
 soundToggleBtn.Size = UDim2.new(1, -20, 0, 30)
-soundToggleBtn.Position = UDim2.new(0, 10, 0, 270)
-soundToggleBtn.BackgroundColor3 = Theme.ButtonActiveBg
-soundToggleBtn.Text = "ON"
+soundToggleBtn.Position = UDim2.new(0, 10, 0, 280)
+soundToggleBtn.BackgroundColor3 = HubConfig.SoundEnabled and Theme.ButtonActiveBg or Theme.ButtonBackground
+soundToggleBtn.Text = HubConfig.SoundEnabled and "ON" or "OFF"
 soundToggleBtn.Font = Theme.FontBold
-soundToggleBtn.TextColor3 = Theme.TextActive
+soundToggleBtn.TextColor3 = HubConfig.SoundEnabled and Theme.TextActive or Theme.TextSecondary
 soundToggleBtn.TextSize = 12
 soundToggleBtn.Parent = settingsMenu
 Instance.new("UICorner", soundToggleBtn).CornerRadius = UDim.new(0, 6)
 
 soundToggleBtn.Activated:Connect(function()
 	HubConfig.SoundEnabled = not HubConfig.SoundEnabled
-	if HubConfig.SoundEnabled then
-		soundToggleBtn.Text = "ON"
-		soundToggleBtn.TextColor3 = Theme.TextActive
-		soundToggleBtn.BackgroundColor3 = Theme.ButtonActiveBg
-	else
-		soundToggleBtn.Text = "OFF"
-		soundToggleBtn.TextColor3 = Theme.TextSecondary
-		soundToggleBtn.BackgroundColor3 = Theme.ButtonBackground
-	end
+	soundToggleBtn.Text = HubConfig.SoundEnabled and "ON" or "OFF"
+	soundToggleBtn.TextColor3 = HubConfig.SoundEnabled and Theme.TextActive or Theme.TextSecondary
+	soundToggleBtn.BackgroundColor3 = HubConfig.SoundEnabled and Theme.ButtonActiveBg or Theme.ButtonBackground
+	saveConfig()
 end)
 
--- Логика открытия меню настроек
 mainSettingsBtn.Activated:Connect(function()
 	isSettingsOpen = not isSettingsOpen
 	if isSettingsOpen then
 		settingsMenu.Visible = true
-		TweenService:Create(settingsMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {
-			GroupTransparency = 0
-		}):Play()
+		TweenService:Create(settingsMenu, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), { GroupTransparency = 0 }):Play()
 	else
-		local closeTween = TweenService:Create(settingsMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
-			GroupTransparency = 1
-		})
-		closeTween:Play()
-		closeTween.Completed:Wait()
-		if not isSettingsOpen then settingsMenu.Visible = false end
+		TweenService:Create(settingsMenu, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), { GroupTransparency = 1 }):Play()
+		task.delay(0.2, function() if not isSettingsOpen then settingsMenu.Visible = false end end)
 	end
 end)
 
--- Первичная инициализация (подтягиваем Active и звуки для уже созданных элементов)
-for _, v in pairs(screenGui:GetDescendants()) do
-	autoProcessElement(v)
+-- =====================================================================
+-- [БЛОК 11] СТАНДАРТНЫЕ ФУНКЦИИ И ФАБРИКА КНОПОК
+-- =====================================================================
+local function playMenuCloseAnimation()
+	isMenuOpen = false
+	local fadeInfo = TweenInfo.new(0.25, Enum.EasingStyle.Cubic, Enum.EasingDirection.In)
+	local fadeTween = TweenService:Create(menuGroup, fadeInfo, { GroupTransparency = 1 })
+	TweenService:Create(uiScale, fadeInfo, { Scale = 0.95 }):Play()
+	fadeTween:Play()
+	fadeTween.Completed:Wait()
+	if not isMenuOpen then menuGroup.Visible = false end
 end
 
--- =====================================================================
--- [БЛОК 15] УЛУЧШЕННАЯ СИСТЕМА ПЕРЕМЕЩЕНИЯ ИНТЕРФЕЙСА (DRAG & DROP)
--- =====================================================================
-local function applyDragAndDropLogic(targetFrame)
-	targetFrame.Active = true -- Обязательная блокировка "сквозных" кликов
-	
-	local isDragging = false
-	local currentDragInput, dragStartPos, startFramePos
-	local inputEndConnection
-
-	targetFrame.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			isDragging = true
-			dragStartPos = input.Position
-			startFramePos = targetFrame.Position
-			
-			-- Очищаем прошлый коннект, если он залип
-			if inputEndConnection then inputEndConnection:Disconnect() end
-			
-			inputEndConnection = input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					isDragging = false
-					if inputEndConnection then
-						inputEndConnection:Disconnect()
-						inputEndConnection = nil
-					end
-				end
-			end)
-		end
-	end)
-
-	targetFrame.InputChanged:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-			currentDragInput = input
-		end
-	end)
-
-	UserInputService.InputChanged:Connect(function(input)
-		if input == currentDragInput and isDragging then
-			local delta = input.Position - dragStartPos
-			TweenService:Create(targetFrame, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
-				Position = UDim2.new(startFramePos.X.Scale, startFramePos.X.Offset + delta.X, startFramePos.Y.Scale, startFramePos.Y.Offset + delta.Y)
-			}):Play()
-		end
-	end)
-end
-
-applyDragAndDropLogic(openBtn)
-applyDragAndDropLogic(menuGroup)
-applyDragAndDropLogic(settingsMenu)
-
--- =====================================================================
--- [БЛОК 16] СИСТЕМА ИЗМЕНЕНИЯ РАЗМЕРА ОКНА (RESIZE CORNER)
--- =====================================================================
-local resizeGrabber = Instance.new("TextButton")
-resizeGrabber.Name = "ResizeHandle"
-resizeGrabber.Text = "◢"
-resizeGrabber.Font = Theme.FontBold
-resizeGrabber.TextSize = 18
-resizeGrabber.TextColor3 = Theme.StrokeColor
-resizeGrabber.BackgroundTransparency = 1
-resizeGrabber.Size = UDim2.new(0, 25, 0, 25)
-resizeGrabber.Position = UDim2.new(1, -25, 1, -25)
-resizeGrabber.ZIndex = 10
-resizeGrabber.Parent = menuGroup
-
-local isResizingActive, resizeAnchorMousePos, resizeAnchorMenuSize = false, nil, nil
-
-resizeGrabber.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		isResizingActive = true
-		resizeAnchorMousePos = input.Position
-		resizeAnchorMenuSize = menuGroup.AbsoluteSize
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if isResizingActive and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		local delta = input.Position - resizeAnchorMousePos
-		local bWidth = math.clamp(resizeAnchorMenuSize.X + delta.X, 550, 1200)
-		local bHeight = math.clamp(resizeAnchorMenuSize.Y + delta.Y, 350, 900)
-		menuGroup.Size = UDim2.new(0, bWidth, 0, bHeight)
-	end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		isResizingActive = false
-	end
-end)
-
--- =====================================================================
--- [БЛОК 17] ОБРАБОТКА ДЕЙСТВИЯ КНОПКИ ОТКРЫТИЯ/ЗАКРЫТИЯ МЕНЮ
--- =====================================================================
 openBtn.MouseButton1Click:Connect(function()
+	if not isAuthenticated then return end
 	isMenuOpen = not isMenuOpen
 	if isMenuOpen then
 		menuGroup.Visible = true
@@ -813,24 +810,157 @@ openBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
--- =====================================================================
--- [БЛОК 18] ЦИКЛ МОНИТОРИНГА И ОБНОВЛЕНИЯ СТАТИСТИКИ СЕРВЕРА
--- =====================================================================
-local frameAccumulator = 0
-local timeSnapshot = tick()
+-- Эта фабрика кнопок теперь 1 в 1 как кнопки твоих аддонов.
+local function createHubFeatureButton(id, titleText, order, customBg, textColor)
+	local button = Instance.new("TextButton")
+	button.Name = id
+	button.Size = UDim2.new(1, -15, 0, 45)
+	button.BackgroundColor3 = customBg or Theme.ButtonBackground
+	button.BackgroundTransparency = HubConfig.BtnTransparency
+	button:SetAttribute("OriginalColor", customBg or Theme.ButtonBackground)
+	button.Text = ""
+	button.AutoButtonColor = true
+	button.LayoutOrder = order
+	button.Parent = scrollFrame
+	Instance.new("UICorner", button).CornerRadius = Theme.CornerRadiusButton
 
+	local textContainer = Instance.new("TextLabel")
+	textContainer.Size = UDim2.new(1, -20, 1, 0)
+	textContainer.Position = UDim2.new(0, 10, 0, 0)
+	textContainer.BackgroundTransparency = 1
+	textContainer.Text = titleText
+	textContainer.Font = Theme.FontPrimary
+	textContainer.TextColor3 = textColor or Theme.TextSecondary
+	textContainer.TextSize = 14
+	textContainer.TextXAlignment = Enum.TextXAlignment.Left
+	textContainer.Parent = button
+	
+	return button, textContainer
+end
+
+local exitButton, exitLabel = createHubFeatureButton("DestroyButton", "Disable HUB", 1, Theme.ButtonDangerBg, Theme.TextPrimary)
+exitButton.MouseButton1Click:Connect(function()
+	if renderConnection then renderConnection:Disconnect() end
+	if dayConnection then dayConnection:Disconnect() end
+	for _, conn in pairs(uiConnections) do conn:Disconnect() end
+	
+	Lighting.ClockTime = originalLightingSettings.ClockTime
+	Lighting.GlobalShadows = originalLightingSettings.GlobalShadows
+	Lighting.FogEnd = originalLightingSettings.FogEnd
+	Lighting.FogStart = originalLightingSettings.FogStart
+	Lighting.Ambient = originalLightingSettings.Ambient
+	Lighting.OutdoorAmbient = originalLightingSettings.OutdoorAmbient
+	
+	for element, densityValue in pairs(originalAtmospheres) do
+		if element and element.Parent then element.Density = densityValue end
+	end
+	screenGui:Destroy()
+end)
+
+local teleportButton = createHubFeatureButton("ClickTeleportButton", "Click Teleport", 2)
+teleportButton.MouseButton1Click:Connect(function()
+	if isTeleporting then return end
+	isTeleporting = true
+	task.spawn(playMenuCloseAnimation)
+	
+	local defaultCursor = mouse.Icon
+	mouse.Icon = "rbxasset://textures/GunCursor.png"
+	local mouseClickSignal
+	mouseClickSignal = mouse.Button1Down:Connect(function()
+		mouseClickSignal:Disconnect()
+		local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if rootPart then rootPart.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0)) end
+		mouse.Icon = defaultCursor
+		isTeleporting = false
+	end)
+end)
+
+local weatherButton, weatherLabel = createHubFeatureButton("DayToggleButton", "Fullbright: OFF", 3)
+weatherButton.MouseButton1Click:Connect(function()
+	isDayEnabled = not isDayEnabled
+	if isDayEnabled then
+		weatherLabel.Text = "Fullbright: ON"
+		weatherLabel.TextColor3 = Theme.TextActive
+		weatherButton.BackgroundColor3 = Theme.ButtonActiveBg
+		weatherButton:SetAttribute("OriginalColor", Theme.ButtonActiveBg)
+		dayConnection = RunService.Heartbeat:Connect(function()
+			Lighting.ClockTime = 12
+			Lighting.GlobalShadows = false
+			Lighting.FogEnd = 1000000
+			Lighting.FogStart = 1000000
+			Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+			Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+			for _, child in pairs(Lighting:GetChildren()) do
+				if child:IsA("Atmosphere") then child.Density = 0 end
+			end
+		end)
+	else
+		weatherLabel.Text = "Fullbright: OFF"
+		weatherLabel.TextColor3 = Theme.TextSecondary
+		weatherButton.BackgroundColor3 = Theme.ButtonBackground
+		weatherButton:SetAttribute("OriginalColor", Theme.ButtonBackground)
+		if dayConnection then dayConnection:Disconnect() dayConnection = nil end
+		
+		Lighting.ClockTime = originalLightingSettings.ClockTime
+		Lighting.GlobalShadows = originalLightingSettings.GlobalShadows
+		Lighting.FogEnd = originalLightingSettings.FogEnd
+		Lighting.FogStart = originalLightingSettings.FogStart
+		Lighting.Ambient = originalLightingSettings.Ambient
+		Lighting.OutdoorAmbient = originalLightingSettings.OutdoorAmbient
+		for element, density in pairs(originalAtmospheres) do
+			if element and element.Parent then element.Density = density end
+		end
+	end
+end)
+
+-- Инициализация Drag and Drop
+applyDragAndDropLogic(openBtn)
+applyDragAndDropLogic(menuGroup)
+applyDragAndDropLogic(settingsMenu)
+
+-- Resize системы
+local resizeGrabber = Instance.new("TextButton")
+resizeGrabber.Text = "◢"
+resizeGrabber.Font = Theme.FontBold
+resizeGrabber.TextSize = 18
+resizeGrabber.TextColor3 = Theme.StrokeColor
+resizeGrabber.BackgroundTransparency = 1
+resizeGrabber.Size = UDim2.new(0, 25, 0, 25)
+resizeGrabber.Position = UDim2.new(1, -25, 1, -25)
+resizeGrabber.ZIndex = 10
+resizeGrabber.Parent = menuGroup
+
+local isResizingActive, resizeAnchorMousePos, resizeAnchorMenuSize = false, nil, nil
+resizeGrabber.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		isResizingActive = true
+		resizeAnchorMousePos = input.Position
+		resizeAnchorMenuSize = menuGroup.AbsoluteSize
+	end
+end)
+UserInputService.InputChanged:Connect(function(input)
+	if isResizingActive and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - resizeAnchorMousePos
+		menuGroup.Size = UDim2.new(0, math.clamp(resizeAnchorMenuSize.X + delta.X, 550, 1200), 0, math.clamp(resizeAnchorMenuSize.Y + delta.Y, 350, 900))
+	end
+end)
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isResizingActive = false end
+end)
+
+-- Серверный цикл мониторинга
+local frameAccumulator, timeSnapshot = 0, tick()
 renderConnection = RunService.RenderStepped:Connect(function()
 	frameAccumulator += 1
 	local currentTime = tick()
-	
 	if currentTime - timeSnapshot >= 1 then 
 		fpsLabel.Text = "FPS: " .. tostring(math.floor(frameAccumulator / (currentTime - timeSnapshot)))
 		pingLabel.Text = "PING: " .. tostring(math.floor(player:GetNetworkPing() * 1000)) .. "ms"
 		onlineLabel.Text = "ONLINE: " .. tostring(#Players:GetPlayers())
-		
 		frameAccumulator = 0
 		timeSnapshot = currentTime
 	end
 end)
 
-
+-- Инициализация всех существующих элементов (звуки, ховер, прозрачность)
+for _, v in pairs(screenGui:GetDescendants()) do autoProcessElement(v) end
