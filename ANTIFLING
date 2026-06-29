@@ -1,0 +1,92 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+-- ==========================================
+-- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- ==========================================
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+-- ==========================================
+-- 2. СОЗДАНИЕ КНОПКИ ANTIFLING
+-- ==========================================
+local antiflingBtn = Instance.new("TextButton")
+antiflingBtn.Name = "AntiFlingToggleButton"
+antiflingBtn.Size = UDim2.new(1, -15, 0, 45)
+antiflingBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+antiflingBtn.BackgroundTransparency = 0.4
+antiflingBtn.Text = ""
+antiflingBtn.AutoButtonColor = true
+antiflingBtn.LayoutOrder = 7 -- Встает после Fly (у которого LayoutOrder = 6)
+antiflingBtn.Parent = scrollFrame
+
+local antiflingCorner = Instance.new("UICorner")
+antiflingCorner.CornerRadius = UDim.new(0, 8)
+antiflingCorner.Parent = antiflingBtn
+
+local antiflingLabel = Instance.new("TextLabel")
+antiflingLabel.Size = UDim2.new(1, -20, 1, 0)
+antiflingLabel.Position = UDim2.new(0, 10, 0, 0)
+antiflingLabel.BackgroundTransparency = 1
+antiflingLabel.Text = "AntiFling: OFF"
+antiflingLabel.Font = Enum.Font.GothamMedium
+antiflingLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+antiflingLabel.TextSize = 14
+antiflingLabel.TextXAlignment = Enum.TextXAlignment.Left
+antiflingLabel.Parent = antiflingBtn
+
+-- ==========================================
+-- 3. ЛОГИКА ANTIFLING
+-- ==========================================
+local isAntiFlingEnabled = false
+local antiflingConnection = nil
+
+local function toggleAntiFling()
+	isAntiFlingEnabled = not isAntiFlingEnabled
+	
+	if isAntiFlingEnabled then
+		-- Визуальное включение
+		antiflingLabel.Text = "AntiFling: ON"
+		antiflingLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+		antiflingBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+		
+		-- Логика Infinite Yield: отключаем коллизию только для других игроков
+		antiflingConnection = RunService.Stepped:Connect(function()
+			for _, otherPlayer in ipairs(Players:GetPlayers()) do
+				if otherPlayer ~= player and otherPlayer.Character then
+					for _, part in ipairs(otherPlayer.Character:GetDescendants()) do
+						if part:IsA("BasePart") and part.CanCollide then
+							part.CanCollide = false
+						end
+					end
+				end
+			end
+		end)
+	else
+		-- Визуальное выключение
+		antiflingLabel.Text = "AntiFling: OFF"
+		antiflingLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		antiflingBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		
+		-- Отключаем цикл
+		if antiflingConnection then
+			antiflingConnection:Disconnect()
+			antiflingConnection = nil
+		end
+		
+		-- Движок Roblox автоматически вернет коллизию деталям других игроков в следующем кадре,
+		-- поэтому вручную восстанавливать CanCollide = true не требуется.
+	end
+end
+
+antiflingBtn.Activated:Connect(toggleAntiFling)
