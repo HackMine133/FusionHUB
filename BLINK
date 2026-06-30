@@ -30,7 +30,7 @@ end
 local blinkSettings = {
 	Enabled = false,
 	Keybind = Enum.KeyCode.Z,
-	Mode = "Hold" -- "Hold" или "Toggle"
+	Mode = "Hold" 
 }
 
 local ghostClone = nil
@@ -40,9 +40,9 @@ local ghostClone = nil
 -- ==========================================
 local blinkRow = Instance.new("Frame")
 blinkRow.Name = "BlinkRow"
-blinkRow.Size = UDim2.new(1, -15, 0, 45)[cite: 6, 7]
-blinkRow.BackgroundTransparency = 1[cite: 6, 7]
-blinkRow.LayoutOrder = 8 -- Встает после Teleport/Noclip
+blinkRow.Size = UDim2.new(1, -15, 0, 45)
+blinkRow.BackgroundTransparency = 1
+blinkRow.LayoutOrder = 8
 blinkRow.Parent = scrollFrame
 
 -- ==========================================
@@ -50,28 +50,28 @@ blinkRow.Parent = scrollFrame
 -- ==========================================
 local blinkBtn = Instance.new("TextButton")
 blinkBtn.Name = "BlinkToggleButton"
-blinkBtn.Size = UDim2.new(1, -55, 1, 0)[cite: 6]
-blinkBtn.Position = UDim2.new(0, 0, 0, 0)[cite: 6]
-blinkBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)[cite: 6, 7]
-blinkBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))[cite: 6]
-blinkBtn.Text = ""[cite: 6, 7]
-blinkBtn.AutoButtonColor = true[cite: 6, 7]
-blinkBtn.Active = true[cite: 6]
+blinkBtn.Size = UDim2.new(1, -55, 1, 0)
+blinkBtn.Position = UDim2.new(0, 0, 0, 0)
+blinkBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+blinkBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
+blinkBtn.Text = ""
+blinkBtn.AutoButtonColor = true
+blinkBtn.Active = true
 blinkBtn.Parent = blinkRow
 
 local blinkCorner = Instance.new("UICorner")
-blinkCorner.CornerRadius = UDim.new(0, 8)[cite: 6, 7]
+blinkCorner.CornerRadius = UDim.new(0, 8)
 blinkCorner.Parent = blinkBtn
 
 local blinkLabel = Instance.new("TextLabel")
-blinkLabel.Size = UDim2.new(1, -20, 1, 0)[cite: 6, 7]
-blinkLabel.Position = UDim2.new(0, 10, 0, 0)[cite: 6, 7]
-blinkLabel.BackgroundTransparency = 1[cite: 6, 7]
+blinkLabel.Size = UDim2.new(1, -20, 1, 0)
+blinkLabel.Position = UDim2.new(0, 10, 0, 0)
+blinkLabel.BackgroundTransparency = 1
 blinkLabel.Text = "Blink (Fake Lag): OFF"
-blinkLabel.Font = Enum.Font.GothamMedium[cite: 6, 7]
-blinkLabel.TextColor3 = Color3.fromRGB(240, 240, 245)[cite: 6, 7]
-blinkLabel.TextSize = 14[cite: 6, 7]
-blinkLabel.TextXAlignment = Enum.TextXAlignment.Left[cite: 6, 7]
+blinkLabel.Font = Enum.Font.GothamMedium
+blinkLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+blinkLabel.TextSize = 14
+blinkLabel.TextXAlignment = Enum.TextXAlignment.Left
 blinkLabel.Parent = blinkBtn
 
 -- ==========================================
@@ -79,35 +79,34 @@ blinkLabel.Parent = blinkBtn
 -- ==========================================
 local settingsBtn = Instance.new("ImageButton")
 settingsBtn.Name = "BlinkSettingsButton"
-settingsBtn.Size = UDim2.new(0, 45, 0, 45)[cite: 6]
-settingsBtn.Position = UDim2.new(1, -45, 0, 0)[cite: 6]
-settingsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)[cite: 6]
-settingsBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))[cite: 6]
-settingsBtn.AutoButtonColor = true[cite: 6]
-settingsBtn.Active = true[cite: 6]
+settingsBtn.Size = UDim2.new(0, 45, 0, 45)
+settingsBtn.Position = UDim2.new(1, -45, 0, 0)
+settingsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+settingsBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
+settingsBtn.AutoButtonColor = true
+settingsBtn.Active = true
 settingsBtn.Parent = blinkRow
 
 local settingsCorner = Instance.new("UICorner")
-settingsCorner.CornerRadius = UDim.new(0, 8)[cite: 6]
+settingsCorner.CornerRadius = UDim.new(0, 8)
 settingsCorner.Parent = settingsBtn
 
 local settingsIcon = Instance.new("ImageLabel")
-settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)[cite: 6]
-settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)[cite: 6]
-settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)[cite: 6]
-settingsIcon.BackgroundTransparency = 1[cite: 6]
-settingsIcon.Image = "rbxassetid://9405931578"[cite: 6]
+settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+settingsIcon.BackgroundTransparency = 1
+settingsIcon.Image = "rbxassetid://9405931578"
 settingsIcon.Parent = settingsBtn
 
 -- ==========================================
 -- 6. МЕНЮ НАСТРОЕК BLINK
 -- ==========================================
-local settingsAPI = _G.FusionHub.CreateAddonSettings("Blink Settings", 250, 180)[cite: 6]
+local settingsAPI = _G.FusionHub.CreateAddonSettings("Blink Settings", 250, 180)
 local blinkMenu = settingsAPI.Window
 
 settingsBtn.Activated:Connect(settingsAPI.ToggleFunction)
 
--- Подпись Keybind
 local keybindLabel = Instance.new("TextLabel")
 keybindLabel.Size = UDim2.new(1, -20, 0, 20)
 keybindLabel.Position = UDim2.new(0, 10, 0, 50)
@@ -119,7 +118,6 @@ keybindLabel.TextSize = 12
 keybindLabel.TextXAlignment = Enum.TextXAlignment.Left
 keybindLabel.Parent = blinkMenu
 
--- Кнопка установки Keybind
 local keybindBtn = Instance.new("TextButton")
 keybindBtn.Size = UDim2.new(1, -20, 0, 35)
 keybindBtn.Position = UDim2.new(0, 10, 0, 75)
@@ -133,7 +131,6 @@ keybindBtn.Parent = blinkMenu
 Instance.new("UICorner", keybindBtn).CornerRadius = UDim.new(0, 6)
 Instance.new("UIStroke", keybindBtn).Color = Color3.fromRGB(80, 80, 90)
 
--- Кнопка режима (Toggle / Hold)
 local modeBtn = Instance.new("TextButton")
 modeBtn.Size = UDim2.new(1, -20, 0, 35)
 modeBtn.Position = UDim2.new(0, 10, 0, 125)
@@ -154,7 +151,6 @@ keybindBtn.Activated:Connect(function()
 end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	-- Настройка бинда
 	if isBinding and input.UserInputType == Enum.UserInputType.Keyboard then
 		blinkSettings.Keybind = input.KeyCode
 		keybindBtn.Text = input.KeyCode.Name
@@ -181,18 +177,15 @@ local function setBlinkState(state)
 	blinkSettings.Enabled = state
 	
 	if blinkSettings.Enabled then
-		-- Визуальное включение
 		blinkLabel.Text = "Blink: ON"
-		blinkLabel.TextColor3 = Color3.fromRGB(150, 255, 150)[cite: 6, 7]
-		blinkBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)[cite: 6, 7]
-		blinkBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))[cite: 6]
+		blinkLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+		blinkBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+		blinkBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))
 		
-		-- Заморозка пакетов (на сервер не уходят координаты)
 		pcall(function()
 			settings():GetService("NetworkSettings").IncomingReplicationLag = 99999
 		end)
 		
-		-- Создание визуального "призрака", чтобы понимать, где мы остались для сервера
 		local char = player.Character
 		if char then
 			char.Archivable = true
@@ -200,12 +193,12 @@ local function setBlinkState(state)
 			
 			for _, v in pairs(ghostClone:GetDescendants()) do
 				if v:IsA("BasePart") then
-					v.Material = Enum.Material.ForceField -- Неоновый прозрачный материал
-					v.Color = Color3.fromRGB(150, 255, 150) -- Зеленый цвет призрака
+					v.Material = Enum.Material.ForceField
+					v.Color = Color3.fromRGB(150, 255, 150)
 					v.CanCollide = false
 					v.Anchored = true
 				elseif v:IsA("Script") or v:IsA("LocalScript") then
-					v:Destroy() -- Удаляем скрипты из клона, чтобы не было багов
+					v:Destroy() 
 				end
 			end
 			
@@ -213,18 +206,15 @@ local function setBlinkState(state)
 		end
 		
 	else
-		-- Визуальное выключение
 		blinkLabel.Text = "Blink: OFF"
-		blinkLabel.TextColor3 = Color3.fromRGB(240, 240, 245)[cite: 6, 7]
-		blinkBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)[cite: 6, 7]
-		blinkBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))[cite: 6]
+		blinkLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		blinkBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		blinkBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
 		
-		-- Восстановление пакетов (моментальный телепорт)
 		pcall(function()
 			settings():GetService("NetworkSettings").IncomingReplicationLag = 0
 		end)
 		
-		-- Удаление призрака
 		if ghostClone then
 			ghostClone:Destroy()
 			ghostClone = nil
@@ -232,12 +222,10 @@ local function setBlinkState(state)
 	end
 end
 
--- Обработка нажатия на саму кнопку (работает как Toggle всегда)
 blinkBtn.Activated:Connect(function()
 	setBlinkState(not blinkSettings.Enabled)
 end)
 
--- Обработка горячих клавиш (Keybind)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed or isBinding then return end
 	
@@ -258,7 +246,6 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
 	end
 end)
 
--- Защита при смерти или респавне
 player.CharacterAdded:Connect(function()
 	if blinkSettings.Enabled then
 		setBlinkState(false)
