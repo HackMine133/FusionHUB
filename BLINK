@@ -1,14 +1,14 @@
-local Playrs = game:GetService("Players")
-local RService = game:GetService("RunService")
-local UService = game:GetService("UserInputService")
-local TService = game:GetService("TweenService")
+local Plys = game:GetService("Players")
+local RS = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local TS = game:GetService("TweenService")
 
-local lPlayer = Playrs.LocalPlayer
+local locPlayer = Plys.LocalPlayer
 
 -- ==========================================
--- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- 1. ОЖИДАНИЕ ИНТЕРФЕЙСА
 -- ==========================================
-local pGui = lPlayer:WaitForChild("PlayerGui")
+local pGui = locPlayer:WaitForChild("PlayerGui")
 local fGui = pGui:WaitForChild("FusionHubGui", 10)
 
 if not fGui then
@@ -27,7 +27,7 @@ end
 -- ==========================================
 -- 2. НАСТРОЙКИ АДДОНА
 -- ==========================================
-local blSet = {
+local blinkCfg = {
 	Active = false,
 	Bind = Enum.KeyCode.Z,
 	Mode = "Hold" 
@@ -115,7 +115,7 @@ kBtn.Size = UDim2.new(1, -20, 0, 35)
 kBtn.Position = UDim2.new(0, 10, 0, 75)
 kBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 kBtn:SetAttribute("OriginalColor", Color3.fromRGB(15, 15, 20))
-kBtn.Text = blSet.Bind.Name
+kBtn.Text = blinkCfg.Bind.Name
 kBtn.Font = Enum.Font.GothamBold
 kBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
 kBtn.TextSize = 13
@@ -128,72 +128,72 @@ mBtn.Size = UDim2.new(1, -20, 0, 35)
 mBtn.Position = UDim2.new(0, 10, 0, 125)
 mBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 mBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 35, 40))
-mBtn.Text = "Mode: " .. blSet.Mode
+mBtn.Text = "Mode: " .. blinkCfg.Mode
 mBtn.Font = Enum.Font.GothamBold
 mBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 mBtn.TextSize = 12
 mBtn.Parent = bMenu
 Instance.new("UICorner", mBtn).CornerRadius = UDim.new(0, 6)
 
-local waitBind = false
+local isBinding = false
 kBtn.Activated:Connect(function()
-	waitBind = true
+	isBinding = true
 	kBtn.Text = "Press any key..."
 	kBtn.TextColor3 = Color3.fromRGB(255, 200, 100)
 end)
 
-UService.InputBegan:Connect(function(inp, proc)
-	if waitBind and inp.UserInputType == Enum.UserInputType.Keyboard then
-		blSet.Bind = inp.KeyCode
-		kBtn.Text = inp.KeyCode.Name
+UIS.InputBegan:Connect(function(input, gameProcessed)
+	if isBinding and input.UserInputType == Enum.UserInputType.Keyboard then
+		blinkCfg.Bind = input.KeyCode
+		kBtn.Text = input.KeyCode.Name
 		kBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
-		waitBind = false
+		isBinding = false
 		return
 	end
 end)
 
 mBtn.Activated:Connect(function()
-	if blSet.Mode == "Hold" then
-		blSet.Mode = "Toggle"
+	if blinkCfg.Mode == "Hold" then
+		blinkCfg.Mode = "Toggle"
 	else
-		blSet.Mode = "Hold"
+		blinkCfg.Mode = "Hold"
 	end
-	mBtn.Text = "Mode: " .. blSet.Mode
+	mBtn.Text = "Mode: " .. blinkCfg.Mode
 end)
 
 -- ==========================================
--- 5. ЛОГИКА ИДЕАЛЬНОГО БЛИНКА (SOFT CLONE)
+-- 5. ЛОГИКА ИДЕАЛЬНОГО БЛИНКА (ФИКС КАМЕРЫ)
 -- ==========================================
-local realChar = nil
-local fakeChar = nil
-local ghostChar = nil
-local propCache = {}
-local fpConnection = nil
+local realAvatar = nil
+local fakeAvatar = nil
+local ghostAvatar = nil
+local origProps = {}
+local fpRenderConn = nil
 
-local function switchBlink(st)
-	if blSet.Active == st then return end
-	blSet.Active = st
+local function toggleBlink(state)
+	if blinkCfg.Active == state then return end
+	blinkCfg.Active = state
 	
-	local cam = workspace.CurrentCamera
+	local camera = workspace.CurrentCamera
 	
-	if blSet.Active then
+	if blinkCfg.Active then
 		bLabel.Text = "Blink: ON"
 		bLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
 		bBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
 		bBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))
 		
-		realChar = lPlayer.Character
-		if not realChar or not realChar:FindFirstChild("HumanoidRootPart") then 
-			blSet.Active = false
+		realAvatar = locPlayer.Character
+		if not realAvatar or not realAvatar:FindFirstChild("HumanoidRootPart") then 
+			blinkCfg.Active = false
 			return 
 		end
 		
-		realChar.Archivable = true
+		realAvatar.Archivable = true
 		
-		-- 1. Создаем Призрака для сервера
-		ghostChar = realChar:Clone()
-		ghostChar.Name = "BlinkGhost"
-		for _, v in pairs(ghostChar:GetDescendants()) do
+		-- 1. Создаем Призрака для сервера (Стоит на месте)
+		ghostAvatar = realAvatar:Clone()
+		ghostAvatar.Name = "ServerGhost"
+		for _, v in pairs(ghostAvatar:GetDescendants()) do
 			if v:IsA("BasePart") then
 				v.Material = Enum.Material.ForceField
 				v.Color = Color3.fromRGB(150, 255, 150)
@@ -203,55 +203,51 @@ local function switchBlink(st)
 				v:Destroy()
 			end
 		end
-		ghostChar.Parent = workspace
+		ghostAvatar.Parent = workspace
 		
-		-- 2. Замораживаем и прячем настоящее тело (оно перестает слать пакеты серверу)
-		propCache = {}
-		for _, v in pairs(realChar:GetDescendants()) do
-			if v:IsA("BasePart") then
-				propCache[v] = {Transparency = v.Transparency, Anchored = v.Anchored, CanCollide = v.CanCollide}
+		-- 2. Создаем нашего подвижного клона
+		fakeAvatar = realAvatar:Clone()
+		fakeAvatar.Name = "LocalBlinkClone"
+		fakeAvatar.Parent = workspace -- ВАЖНО: СНАЧАЛА PARENT, ИНАЧЕ КЛОН НЕ ПОЯВИТСЯ
+		
+		-- Сохраняем позицию камеры перед сменой тела
+		local savedCamCFrame = camera.CFrame
+		
+		-- Передаем управление клону
+		locPlayer.Character = fakeAvatar
+		camera.CameraSubject = fakeAvatar:WaitForChild("Humanoid")
+		
+		-- Возвращаем камеру точно туда, где она была
+		camera.CFrame = savedCamCFrame
+		
+		-- 3. Прячем и якорим настоящее тело (чтобы оно не двигалось для сервера)
+		origProps = {}
+		for _, v in pairs(realAvatar:GetDescendants()) do
+			if v:IsA("BasePart") or v:IsA("Decal") then
+				origProps[v] = { Transparency = v.Transparency }
 				v.Transparency = 1
-				v.Anchored = true 
-				v.CanCollide = false
+				
+				if v:IsA("BasePart") then
+					origProps[v].Anchored = v.Anchored
+					origProps[v].CanCollide = v.CanCollide
+					v.Anchored = true 
+					v.CanCollide = false
+				end
 			end
 		end
 		
-		-- 3. Создаем Клона для плавного бега
-		fakeChar = realChar:Clone()
-		fakeChar.Name = lPlayer.Name
-		
-		-- Сохраняем текущую камеру, чтобы не было дерганий
-		local oldCFrame = cam.CFrame
-		local oldFocus = cam.Focus
-		
-		-- Важный трюк: сначала задаем Character, а потом кидаем в Workspace
-		-- Это заставит скрипты анимаций и управления включиться без багов!
-		lPlayer.Character = fakeChar
-		fakeChar.Parent = workspace
-		
-		-- Возвращаем камеру обратно
-		cam.CameraSubject = fakeChar:WaitForChild("Humanoid")
-		cam.CFrame = oldCFrame
-		cam.Focus = oldFocus
-		
-		-- 4. Фикс для вида от первого лица (чтобы не было видно головы клона)
-		fpConnection = RService.RenderStepped:Connect(function()
-			if fakeChar and fakeChar:FindFirstChild("Head") then
-				local dist = (cam.CFrame.Position - fakeChar.Head.Position).Magnitude
-				local isFirstPerson = dist < 1.5
+		-- 4. Фикс от первого лица (скрываем голову клона, когда мы приближаем камеру)
+		fpRenderConn = RS.RenderStepped:Connect(function()
+			if fakeAvatar and fakeAvatar:FindFirstChild("Head") then
+				local dist = (camera.CFrame.Position - fakeAvatar.Head.Position).Magnitude
+				local isFirstPerson = dist < 1.5 -- Если камера ближе 1.5 стадов к голове
 				
-				for _, part in ipairs(fakeChar:GetDescendants()) do
+				for _, part in ipairs(fakeAvatar:GetDescendants()) do
 					if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
 						if isFirstPerson then
-							if part.LocalTransparencyModifier < 1 then
-								part:SetAttribute("OldMod", part.LocalTransparencyModifier)
-								part.LocalTransparencyModifier = 1
-							end
+							part.LocalTransparencyModifier = 1
 						else
-							if part:GetAttribute("OldMod") then
-								part.LocalTransparencyModifier = part:GetAttribute("OldMod")
-								part:SetAttribute("OldMod", nil)
-							end
+							part.LocalTransparencyModifier = 0
 						end
 					end
 				end
@@ -264,37 +260,45 @@ local function switchBlink(st)
 		bBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 		bBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
 		
-		if fpConnection then 
-			fpConnection:Disconnect() 
-			fpConnection = nil 
+		if fpRenderConn then 
+			fpRenderConn:Disconnect() 
+			fpRenderConn = nil 
 		end
 		
-		if realChar and fakeChar and realChar:FindFirstChild("HumanoidRootPart") and fakeChar:FindFirstChild("HumanoidRootPart") then
-			local oldCFrame = cam.CFrame
-			local oldFocus = cam.Focus
+		if realAvatar and fakeAvatar and realAvatar:FindFirstChild("HumanoidRootPart") and fakeAvatar:FindFirstChild("HumanoidRootPart") then
+			-- Строго сохраняем CFrame камеры перед возвращением
+			local finalCamCFrame = camera.CFrame
 			
-			-- Телепортируем настоящее тело к позиции клона
-			realChar.HumanoidRootPart.CFrame = fakeChar.HumanoidRootPart.CFrame
+			-- Телепортируем настоящее тело на позицию клона
+			realAvatar.HumanoidRootPart.CFrame = fakeAvatar.HumanoidRootPart.CFrame
 			
-			-- Возвращаем свойства (видимость, коллизии)
-			for part, data in pairs(propCache) do
-				if part and part.Parent then
-					part.Transparency = data.Transparency
-					part.Anchored = data.Anchored
-					part.CanCollide = data.CanCollide
+			-- Восстанавливаем внешний вид настоящего тела
+			for obj, data in pairs(origProps) do
+				if obj and obj.Parent then
+					obj.Transparency = data.Transparency
+					if obj:IsA("BasePart") then
+						obj.Anchored = data.Anchored
+						obj.CanCollide = data.CanCollide
+					end
 				end
 			end
 			
-			-- Передаем управление обратно плавно
-			lPlayer.Character = realChar
-			cam.CameraSubject = realChar:WaitForChild("Humanoid")
-			cam.CFrame = oldCFrame
-			cam.Focus = oldFocus
+			-- Возвращаем управление оригинальному телу
+			locPlayer.Character = realAvatar
+			camera.CameraSubject = realAvatar:WaitForChild("Humanoid")
+			
+			-- ФИКС Y ОСИ: Принудительно возвращаем камере сохраненный угол
+			camera.CFrame = finalCamCFrame
+			-- Иногда скрипты Roblox переписывают камеру в следующем кадре, поэтому дублируем:
+			task.spawn(function()
+				RS.RenderStepped:Wait()
+				camera.CFrame = finalCamCFrame
+			end)
 		end
 		
-		-- Удаляем мусор
-		if ghostChar then ghostChar:Destroy() ghostChar = nil end
-		if fakeChar then fakeChar:Destroy() fakeChar = nil end
+		-- Убираем мусор
+		if ghostAvatar then ghostAvatar:Destroy() ghostAvatar = nil end
+		if fakeAvatar then fakeAvatar:Destroy() fakeAvatar = nil end
 	end
 end
 
@@ -302,35 +306,35 @@ end
 -- 6. ОБРАБОТЧИКИ НАЖАТИЙ
 -- ==========================================
 bBtn.Activated:Connect(function()
-	switchBlink(not blSet.Active)
+	toggleBlink(not blinkCfg.Active)
 end)
 
-UService.InputBegan:Connect(function(inp, proc)
-	if proc or waitBind then return end
+UIS.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed or isBinding then return end
 	
-	if inp.KeyCode == blSet.Bind then
-		if blSet.Mode == "Toggle" then
-			switchBlink(not blSet.Active)
-		elseif blSet.Mode == "Hold" then
-			switchBlink(true)
+	if input.KeyCode == blinkCfg.Bind then
+		if blinkCfg.Mode == "Toggle" then
+			toggleBlink(not blinkCfg.Active)
+		elseif blinkCfg.Mode == "Hold" then
+			toggleBlink(true)
 		end
 	end
 end)
 
-UService.InputEnded:Connect(function(inp, proc)
-	if proc or waitBind then return end
+UIS.InputEnded:Connect(function(input, gameProcessed)
+	if gameProcessed or isBinding then return end
 	
-	if inp.KeyCode == blSet.Bind and blSet.Mode == "Hold" then
-		switchBlink(false)
+	if input.KeyCode == blinkCfg.Bind and blinkCfg.Mode == "Hold" then
+		toggleBlink(false)
 	end
 end)
 
-lPlayer.CharacterAdded:Connect(function(newChar)
-	-- Игнорируем авто-отключение, если это просто мы переключаемся на клона
-	if fakeChar and newChar == fakeChar then return end
-	if realChar and newChar == realChar then return end
+-- Умная защита от багов при респавне
+locPlayer.CharacterAdded:Connect(function(newChar)
+	if fakeAvatar and newChar == fakeAvatar then return end
+	if realAvatar and newChar == realAvatar then return end
 	
-	if blSet.Active then
-		switchBlink(false)
+	if blinkCfg.Active then
+		toggleBlink(false)
 	end
 end)
