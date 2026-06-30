@@ -30,8 +30,7 @@ end
 local trkSet = {
 	Active = false,
 	TeamCheck = true,
-	WallCheck = true, -- Новая настройка проверки стен
-	FovAngle = 20 
+	FovAngle = 20 -- Угол "взгляда" (в градусах). 20 - оптимально для защиты от анимаций
 }
 
 local activeTrackers = {}
@@ -43,7 +42,7 @@ local trkRow = Instance.new("Frame")
 trkRow.Name = "TrackerRow"
 trkRow.Size = UDim2.new(1, -15, 0, 45)
 trkRow.BackgroundTransparency = 1
-trkRow.LayoutOrder = 10 
+trkRow.LayoutOrder = 10 -- Встает в конец списка
 trkRow.Parent = sFrame
 
 local trkBtn = Instance.new("TextButton")
@@ -97,7 +96,7 @@ sIcon.Parent = setBtn
 -- ==========================================
 -- 4. МЕНЮ НАСТРОЕК
 -- ==========================================
-local tAPI = _G.FusionHub.CreateAddonSettings("Tracker Settings", 250, 220) -- Увеличили высоту для новой кнопки
+local tAPI = _G.FusionHub.CreateAddonSettings("Tracker Settings", 250, 180)
 local tMenu = tAPI.Window
 
 setBtn.Activated:Connect(tAPI.ToggleFunction)
@@ -155,34 +154,13 @@ fovBox.FocusLost:Connect(function()
 	fovBox.Text = tostring(trkSet.FovAngle)
 end)
 
--- Кнопка WallCheck
-local wallBtn = Instance.new("TextButton")
-wallBtn.Size = UDim2.new(1, -20, 0, 35)
-wallBtn.Position = UDim2.new(0, 10, 0, 165)
-wallBtn.BackgroundColor3 = trkSet.WallCheck and Color3.fromRGB(45, 120, 45) or Color3.fromRGB(180, 45, 45)
-wallBtn:SetAttribute("OriginalColor", wallBtn.BackgroundColor3)
-wallBtn.Text = "Wall Check: " .. (trkSet.WallCheck and "ON" or "OFF")
-wallBtn.Font = Enum.Font.GothamBold
-wallBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-wallBtn.TextSize = 12
-wallBtn.Parent = tMenu
-Instance.new("UICorner", wallBtn).CornerRadius = UDim.new(0, 6)
-
-wallBtn.Activated:Connect(function()
-	trkSet.WallCheck = not trkSet.WallCheck
-	wallBtn.Text = "Wall Check: " .. (trkSet.WallCheck and "ON" or "OFF")
-	local newColor = trkSet.WallCheck and Color3.fromRGB(45, 120, 45) or Color3.fromRGB(180, 45, 45)
-	wallBtn.BackgroundColor3 = newColor
-	wallBtn:SetAttribute("OriginalColor", newColor)
-end)
-
-
 -- ==========================================
 -- 5. ВИЗУАЛЬНЫЕ ЭЛЕМЕНТЫ ТРЕКЕРА
 -- ==========================================
+-- Текст-предупреждение на экране
 local screenAlert = Instance.new("TextLabel")
 screenAlert.Size = UDim2.new(1, 0, 0, 50)
-screenAlert.Position = UDim2.new(0, 0, 0.7, 0) 
+screenAlert.Position = UDim2.new(0, 0, 0.7, 0) -- Чуть ниже центра экрана
 screenAlert.BackgroundTransparency = 1
 screenAlert.Text = ""
 screenAlert.Font = Enum.Font.GothamBlack
@@ -196,6 +174,7 @@ alertStroke.Color = Color3.fromRGB(0, 0, 0)
 alertStroke.Thickness = 2
 alertStroke.Parent = screenAlert
 
+-- Невидимая точка у нашей камеры, откуда будет исходить лазер
 local originPart = Instance.new("Part")
 originPart.Size = Vector3.new(0.1, 0.1, 0.1)
 originPart.Transparency = 1
@@ -228,7 +207,11 @@ local function toggleTracker(state)
 		trkBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
 		trkBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))
 		
+		local rayParams = RaycastParams.new()
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		
 		trkConnection = tRunSvc.RenderStepped:Connect(function()
+			-- Обновляем позицию начала лазера (чуть ниже камеры, чтобы не перекрывать прицел)
 			originPart.CFrame = workspace.CurrentCamera.CFrame * CFrame.new(0, -0.8, 0)
 			
 			local lookers = {}
@@ -242,41 +225,28 @@ local function toggleTracker(state)
 						local pChar = p.Character
 						
 						if pChar and pChar:FindFirstChild("Head") and pChar:FindFirstChild("Humanoid") and pChar.Humanoid.Health > 0 then
+							-- Проверка на команду
 							local isEnemy = true
 							if trkSet.TeamCheck and p.Team == lClient.Team then
 								isEnemy = false
 							end
 							
 							if isEnemy then
+								-- Математика: вычисляем, смотрит ли вектор головы врага в нашу сторону
+								local dirToMe = (myHead.Position - pChar.Head.Position).Unit
+								-- Используем HumanoidRootPart для большей стабильности (не дергается от анимаций дыхания)
 								local enemyRoot = pChar:FindFirstChild("HumanoidRootPart")
 								local aimPart = enemyRoot or pChar.Head
 								
-								local dirToMe = (myHead.Position - aimPart.Position).Unit
 								local dotProduct = aimPart.CFrame.LookVector:Dot(dirToMe)
 								local threshold = math.cos(math.rad(trkSet.FovAngle))
 								
-								-- 1. Сначала проверяем, смотрит ли он в нашу сторону
 								if dotProduct >= threshold then
-									local hasLineOfSight = true
+									-- Проверка видимости прямой линии (стены)
+									rayParams.FilterAncestorsInstances = {myChar, pChar}
+									local raycastResult = workspace:Raycast(pChar.Head.Position, myHead.Position - pChar.Head.Position, rayParams)
 									
-									-- 2. Затем (если включена настройка) пускаем невидимый луч для проверки стен
-									if trkSet.WallCheck then
-										local rayParams = RaycastParams.new()
-										rayParams.FilterType = Enum.RaycastFilterType.Exclude
-										-- Игнорируем наше тело, тело врага и точку камеры, чтобы луч врезался ТОЛЬКО в стену
-										rayParams.FilterDescendantsInstances = {myChar, pChar, originPart}
-										
-										local vecToMe = myHead.Position - aimPart.Position
-										local rayResult = workspace:Raycast(aimPart.Position, vecToMe, rayParams)
-										
-										-- Если луч во что-то врезался по пути к нам (result не nil), значит там стена
-										if rayResult then
-											hasLineOfSight = false
-										end
-									end
-									
-									-- 3. Если всё ок — фиксируем зрительный контакт
-									if hasLineOfSight then
+									if not raycastResult then
 										isLooking = true
 										table.insert(lookers, p.DisplayName)
 									end
@@ -284,7 +254,7 @@ local function toggleTracker(state)
 							end
 						end
 						
-						-- Отрисовка лазеров и Highlight
+						-- Управление визуализацией
 						if isLooking then
 							if not activeTrackers[p] then
 								local att = Instance.new("Attachment")
@@ -295,8 +265,8 @@ local function toggleTracker(state)
 								beam.Attachment1 = att
 								beam.FaceCamera = true
 								beam.Color = ColorSequence.new(Color3.fromRGB(255, 40, 40))
-								beam.Width0 = 0.05 
-								beam.Width1 = 0.4  
+								beam.Width0 = 0.05 -- Тонкий у камеры
+								beam.Width1 = 0.4  -- Широкий на враге
 								beam.Transparency = NumberSequence.new(0.1)
 								beam.LightEmission = 1
 								beam.LightInfluence = 0
@@ -311,6 +281,7 @@ local function toggleTracker(state)
 								
 								activeTrackers[p] = {Beam = beam, Att = att, Hl = hl}
 							else
+								-- Защита от багов перерождения врага: возвращаем элементы на место
 								if activeTrackers[p].Att.Parent ~= p.Character.Head then
 									activeTrackers[p].Att.Parent = p.Character.Head
 								end
@@ -325,6 +296,7 @@ local function toggleTracker(state)
 				end
 			end
 			
+			-- Обновление UI предупреждения
 			if #lookers > 0 then
 				screenAlert.Text = "⚠️ ТЕБЯ ЗАМЕТИЛИ: " .. table.concat(lookers, ", ") .. " ⚠️"
 				screenAlert.Visible = true
@@ -351,6 +323,7 @@ local function toggleTracker(state)
 	end
 end
 
+-- Очистка при выходе игрока
 tPlayers.PlayerRemoving:Connect(function(p)
 	clearPlayerTracker(p)
 end)
