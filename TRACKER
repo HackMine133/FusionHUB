@@ -1,0 +1,324 @@
+local tPlayers = game:GetService("Players")
+local tRunSvc = game:GetService("RunService")
+local tUiSvc = game:GetService("UserInputService")
+local tTween = game:GetService("TweenService")
+
+local lClient = tPlayers.LocalPlayer
+
+-- ==========================================
+-- 1. ОЖИДАНИЕ ИНТЕРФЕЙСА
+-- ==========================================
+local pGui = lClient:WaitForChild("PlayerGui")
+local fGui = pGui:WaitForChild("FusionHubGui", 10)
+
+if not fGui then
+	warn("FusionHub не найден! Запустите ядро.")
+	return
+end
+
+local mGroup = fGui:WaitForChild("MainMenu")
+local sFrame = mGroup:WaitForChild("ContentScroll")
+
+if type(_G.FusionHub) ~= "table" or type(_G.FusionHub.CreateAddonSettings) ~= "function" then
+	warn("API не найдено!")
+	return
+end
+
+-- ==========================================
+-- 2. НАСТРОЙКИ АДДОНА
+-- ==========================================
+local trkSet = {
+	Active = false,
+	TeamCheck = true,
+	FovAngle = 20 -- Угол "взгляда" (в градусах). 20 - оптимально для защиты от анимаций
+}
+
+local activeTrackers = {}
+
+-- ==========================================
+-- 3. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
+-- ==========================================
+local trkRow = Instance.new("Frame")
+trkRow.Name = "TrackerRow"
+trkRow.Size = UDim2.new(1, -15, 0, 45)
+trkRow.BackgroundTransparency = 1
+trkRow.LayoutOrder = 10 -- Встает в конец списка
+trkRow.Parent = sFrame
+
+local trkBtn = Instance.new("TextButton")
+trkBtn.Name = "TrackerToggle"
+trkBtn.Size = UDim2.new(1, -55, 1, 0)
+trkBtn.Position = UDim2.new(0,0,0,0)
+trkBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+trkBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
+trkBtn.Text = ""
+trkBtn.AutoButtonColor = true
+trkBtn.Active = true
+trkBtn.Parent = trkRow
+
+local trkCorner = Instance.new("UICorner")
+trkCorner.CornerRadius = UDim.new(0, 8)
+trkCorner.Parent = trkBtn
+
+local trkLabel = Instance.new("TextLabel")
+trkLabel.Size = UDim2.new(1, -20, 1, 0)
+trkLabel.Position = UDim2.new(0, 10, 0, 0)
+trkLabel.BackgroundTransparency = 1
+trkLabel.Text = "Stare Tracker: OFF"
+trkLabel.Font = Enum.Font.GothamMedium
+trkLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+trkLabel.TextSize = 14
+trkLabel.TextXAlignment = Enum.TextXAlignment.Left
+trkLabel.Parent = trkBtn
+
+local setBtn = Instance.new("ImageButton")
+setBtn.Name = "TrackerSettings"
+setBtn.Size = UDim2.new(0, 45, 0, 45)
+setBtn.Position = UDim2.new(1, -45, 0, 0)
+setBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+setBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
+setBtn.AutoButtonColor = true
+setBtn.Active = true
+setBtn.Parent = trkRow
+
+local sCorner = Instance.new("UICorner")
+sCorner.CornerRadius = UDim.new(0, 8)
+sCorner.Parent = setBtn
+
+local sIcon = Instance.new("ImageLabel")
+sIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+sIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+sIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+sIcon.BackgroundTransparency = 1
+sIcon.Image = "rbxassetid://9405931578"
+sIcon.Parent = setBtn
+
+-- ==========================================
+-- 4. МЕНЮ НАСТРОЕК
+-- ==========================================
+local tAPI = _G.FusionHub.CreateAddonSettings("Tracker Settings", 250, 180)
+local tMenu = tAPI.Window
+
+setBtn.Activated:Connect(tAPI.ToggleFunction)
+
+-- Кнопка TeamCheck
+local teamBtn = Instance.new("TextButton")
+teamBtn.Size = UDim2.new(1, -20, 0, 35)
+teamBtn.Position = UDim2.new(0, 10, 0, 50)
+teamBtn.BackgroundColor3 = trkSet.TeamCheck and Color3.fromRGB(45, 120, 45) or Color3.fromRGB(180, 45, 45)
+teamBtn:SetAttribute("OriginalColor", teamBtn.BackgroundColor3)
+teamBtn.Text = "Ignore Teammates: " .. (trkSet.TeamCheck and "ON" or "OFF")
+teamBtn.Font = Enum.Font.GothamBold
+teamBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+teamBtn.TextSize = 12
+teamBtn.Parent = tMenu
+Instance.new("UICorner", teamBtn).CornerRadius = UDim.new(0, 6)
+
+teamBtn.Activated:Connect(function()
+	trkSet.TeamCheck = not trkSet.TeamCheck
+	teamBtn.Text = "Ignore Teammates: " .. (trkSet.TeamCheck and "ON" or "OFF")
+	local newColor = trkSet.TeamCheck and Color3.fromRGB(45, 120, 45) or Color3.fromRGB(180, 45, 45)
+	teamBtn.BackgroundColor3 = newColor
+	teamBtn:SetAttribute("OriginalColor", newColor)
+end)
+
+-- Настройка угла (FOV)
+local fovLabel = Instance.new("TextLabel")
+fovLabel.Size = UDim2.new(1, -20, 0, 20)
+fovLabel.Position = UDim2.new(0, 10, 0, 95)
+fovLabel.BackgroundTransparency = 1
+fovLabel.Text = "Field of View (Degrees):"
+fovLabel.Font = Enum.Font.Gotham
+fovLabel.TextColor3 = Color3.fromRGB(180, 180, 185)
+fovLabel.TextSize = 12
+fovLabel.TextXAlignment = Enum.TextXAlignment.Left
+fovLabel.Parent = tMenu
+
+local fovBox = Instance.new("TextBox")
+fovBox.Size = UDim2.new(1, -20, 0, 30)
+fovBox.Position = UDim2.new(0, 10, 0, 120)
+fovBox.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+fovBox.Text = tostring(trkSet.FovAngle)
+fovBox.Font = Enum.Font.GothamBold
+fovBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+fovBox.TextSize = 13
+fovBox.Parent = tMenu
+Instance.new("UICorner", fovBox).CornerRadius = UDim.new(0, 6)
+Instance.new("UIStroke", fovBox).Color = Color3.fromRGB(80, 80, 90)
+
+fovBox.FocusLost:Connect(function()
+	local num = tonumber(fovBox.Text)
+	if num then
+		trkSet.FovAngle = math.clamp(num, 5, 90)
+	end
+	fovBox.Text = tostring(trkSet.FovAngle)
+end)
+
+-- ==========================================
+-- 5. ВИЗУАЛЬНЫЕ ЭЛЕМЕНТЫ ТРЕКЕРА
+-- ==========================================
+-- Текст-предупреждение на экране
+local screenAlert = Instance.new("TextLabel")
+screenAlert.Size = UDim2.new(1, 0, 0, 50)
+screenAlert.Position = UDim2.new(0, 0, 0.7, 0) -- Чуть ниже центра экрана
+screenAlert.BackgroundTransparency = 1
+screenAlert.Text = ""
+screenAlert.Font = Enum.Font.GothamBlack
+screenAlert.TextColor3 = Color3.fromRGB(255, 50, 50)
+screenAlert.TextSize = 24
+screenAlert.Visible = false
+screenAlert.Parent = fGui
+
+local alertStroke = Instance.new("UIStroke")
+alertStroke.Color = Color3.fromRGB(0, 0, 0)
+alertStroke.Thickness = 2
+alertStroke.Parent = screenAlert
+
+-- Невидимая точка у нашей камеры, откуда будет исходить лазер
+local originPart = Instance.new("Part")
+originPart.Size = Vector3.new(0.1, 0.1, 0.1)
+originPart.Transparency = 1
+originPart.CanCollide = false
+originPart.Anchored = true
+originPart.Name = "TrackerCameraOrigin"
+originPart.Parent = workspace
+
+local originAtt = Instance.new("Attachment")
+originAtt.Parent = originPart
+
+local trkConnection = nil
+
+local function clearPlayerTracker(p)
+	if activeTrackers[p] then
+		if activeTrackers[p].Beam then activeTrackers[p].Beam:Destroy() end
+		if activeTrackers[p].Att then activeTrackers[p].Att:Destroy() end
+		if activeTrackers[p].Hl then activeTrackers[p].Hl:Destroy() end
+		activeTrackers[p] = nil
+	end
+end
+
+local function toggleTracker(state)
+	if trkSet.Active == state then return end
+	trkSet.Active = state
+	
+	if trkSet.Active then
+		trkLabel.Text = "Stare Tracker: ON"
+		trkLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+		trkBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+		trkBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))
+		
+		trkConnection = tRunSvc.RenderStepped:Connect(function()
+			-- Обновляем позицию начала лазера (чуть ниже камеры, чтобы не перекрывать прицел)
+			originPart.CFrame = workspace.CurrentCamera.CFrame * CFrame.new(0, -0.8, 0)
+			
+			local lookers = {}
+			local myChar = lClient.Character
+			local myHead = myChar and myChar:FindFirstChild("Head")
+			
+			if myHead then
+				for _, p in ipairs(tPlayers:GetPlayers()) do
+					if p ~= lClient then
+						local isLooking = false
+						local pChar = p.Character
+						
+						if pChar and pChar:FindFirstChild("Head") and pChar:FindFirstChild("Humanoid") and pChar.Humanoid.Health > 0 then
+							-- Проверка на команду
+							local isEnemy = true
+							if trkSet.TeamCheck and p.Team == lClient.Team then
+								isEnemy = false
+							end
+							
+							if isEnemy then
+								-- Математика: вычисляем, смотрит ли вектор головы врага в нашу сторону
+								local dirToMe = (myHead.Position - pChar.Head.Position).Unit
+								-- Используем HumanoidRootPart для большей стабильности (не дергается от анимаций дыхания)
+								local enemyRoot = pChar:FindFirstChild("HumanoidRootPart")
+								local aimPart = enemyRoot or pChar.Head
+								
+								local dotProduct = aimPart.CFrame.LookVector:Dot(dirToMe)
+								local threshold = math.cos(math.rad(trkSet.FovAngle))
+								
+								if dotProduct >= threshold then
+									isLooking = true
+									table.insert(lookers, p.DisplayName)
+								end
+							end
+						end
+						
+						-- Управление визуализацией
+						if isLooking then
+							if not activeTrackers[p] then
+								local att = Instance.new("Attachment")
+								att.Parent = p.Character.Head
+								
+								local beam = Instance.new("Beam")
+								beam.Attachment0 = originAtt
+								beam.Attachment1 = att
+								beam.FaceCamera = true
+								beam.Color = ColorSequence.new(Color3.fromRGB(255, 40, 40))
+								beam.Width0 = 0.05 -- Тонкий у камеры
+								beam.Width1 = 0.4  -- Широкий на враге
+								beam.Transparency = NumberSequence.new(0.1)
+								beam.LightEmission = 1
+								beam.LightInfluence = 0
+								beam.Parent = originPart
+								
+								local hl = Instance.new("Highlight")
+								hl.FillColor = Color3.fromRGB(255, 40, 40)
+								hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+								hl.FillTransparency = 0.6
+								hl.OutlineTransparency = 0.1
+								hl.Parent = p.Character
+								
+								activeTrackers[p] = {Beam = beam, Att = att, Hl = hl}
+							else
+								-- Защита от багов перерождения врага: возвращаем элементы на место
+								if activeTrackers[p].Att.Parent ~= p.Character.Head then
+									activeTrackers[p].Att.Parent = p.Character.Head
+								end
+								if activeTrackers[p].Hl.Parent ~= p.Character then
+									activeTrackers[p].Hl.Parent = p.Character
+								end
+							end
+						else
+							clearPlayerTracker(p)
+						end
+					end
+				end
+			end
+			
+			-- Обновление UI предупреждения
+			if #lookers > 0 then
+				screenAlert.Text = "⚠️ ТЕБЯ ЗАМЕТИЛИ: " .. table.concat(lookers, ", ") .. " ⚠️"
+				screenAlert.Visible = true
+			else
+				screenAlert.Visible = false
+			end
+		end)
+		
+	else
+		trkLabel.Text = "Stare Tracker: OFF"
+		trkLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		trkBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		trkBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
+		
+		if trkConnection then
+			trkConnection:Disconnect()
+			trkConnection = nil
+		end
+		
+		screenAlert.Visible = false
+		for p, _ in pairs(activeTrackers) do
+			clearPlayerTracker(p)
+		end
+	end
+end
+
+-- Очистка при выходе игрока
+tPlayers.PlayerRemoving:Connect(function(p)
+	clearPlayerTracker(p)
+end)
+
+trkBtn.Activated:Connect(function()
+	toggleTracker(not trkSet.Active)
+end)
