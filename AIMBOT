@@ -25,15 +25,19 @@ local scrollFrame = menuGroup:WaitForChild("ContentScroll")
 local aimSettings = {
 	Enabled = false,
 	AimPart = "Head",
-	Smoothness = 0.5,
+	Smoothness = 1,
 	TeamCheck = false,
 	TargetTeam = "All",
 	ShowFOV = false,
 	FOVRadius = 150,
-	WallCheck = true
+	WallCheck = true,
+	-- НОВЫЕ НАСТРОЙКИ
+	Bind = Enum.UserInputType.MouseButton2, -- По умолчанию ПКМ
+	Mode = "Hold" -- Hold или Toggle
 }
 
-local aimConnection = nil
+local isAiming = false -- Фактическое состояние наведения
+local waitBind = false -- Состояние ожидания ввода бинда
 
 -- ==========================================
 -- 2. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
@@ -136,10 +140,10 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ==========================================
--- 6. МЕНЮ НАСТРОЕК AIMBOT (НА ОСНОВЕ API ЯДРА)
+-- 6. МЕНЮ НАСТРОЕК AIMBOT
 -- ==========================================
--- Используем встроенную функцию хаба для идеальной синхронизации стилей
-local settingsAPI = _G.FusionHub.CreateAddonSettings("Aimbot Settings", 250, 340)
+-- Увеличена высота меню до 420 для вмещения новых настроек
+local settingsAPI = _G.FusionHub.CreateAddonSettings("Aimbot Settings", 250, 420)
 local aimMenu = settingsAPI.Window
 local toggleAimMenu = settingsAPI.ToggleFunction
 
@@ -163,7 +167,23 @@ local function createSettingsBtn(text, posY, callback)
 	return btn
 end
 
-createSettingsBtn("Target: " .. aimSettings.AimPart, 45, function(btn)
+-- [НОВОЕ] Настройка биндов
+local bindBtn = createSettingsBtn("Bind: " .. aimSettings.Bind.Name, 45, function(btn)
+	waitBind = true
+	btn.Text = "Press any key/mouse..."
+	btn.TextColor3 = Color3.fromRGB(255, 200, 100)
+end)
+
+local modeBtn = createSettingsBtn("Mode: " .. aimSettings.Mode, 85, function(btn)
+	if aimSettings.Mode == "Hold" then
+		aimSettings.Mode = "Toggle"
+	else
+		aimSettings.Mode = "Hold"
+	end
+	btn.Text = "Mode: " .. aimSettings.Mode
+end)
+
+createSettingsBtn("Target: " .. aimSettings.AimPart, 125, function(btn)
 	if aimSettings.AimPart == "Head" then
 		aimSettings.AimPart = "HumanoidRootPart"
 		btn.Text = "Target: Torso"
@@ -180,14 +200,14 @@ local smoothModes = {
 }
 local smoothIndex = 2
 
-createSettingsBtn("Speed: " .. smoothModes[smoothIndex].name, 85, function(btn)
+createSettingsBtn("Speed: " .. smoothModes[smoothIndex].name, 165, function(btn)
 	smoothIndex = smoothIndex + 1
 	if smoothIndex > #smoothModes then smoothIndex = 1 end
 	aimSettings.Smoothness = smoothModes[smoothIndex].value
 	btn.Text = "Speed: " .. smoothModes[smoothIndex].name
 end)
 
-createSettingsBtn("Team Check: OFF", 125, function(btn)
+createSettingsBtn("Team Check: OFF", 205, function(btn)
 	aimSettings.TeamCheck = not aimSettings.TeamCheck
 	if aimSettings.TeamCheck then
 		btn.Text = "Team Check: ON (Ignore Own)"
@@ -198,7 +218,7 @@ createSettingsBtn("Team Check: OFF", 125, function(btn)
 	end
 end)
 
-createSettingsBtn("Target Team: All", 165, function(btn)
+createSettingsBtn("Target Team: All", 245, function(btn)
 	local availableTeams = {"All"}
 	local foundTeams = {}
 	
@@ -240,7 +260,7 @@ createSettingsBtn("Target Team: All", 165, function(btn)
 	end
 end)
 
-local wallCheckBtn = createSettingsBtn("Wall Check: ON", 205, function(btn)
+local wallCheckBtn = createSettingsBtn("Wall Check: ON", 285, function(btn)
 	aimSettings.WallCheck = not aimSettings.WallCheck
 	if aimSettings.WallCheck then
 		btn.Text = "Wall Check: ON"
@@ -252,7 +272,7 @@ local wallCheckBtn = createSettingsBtn("Wall Check: ON", 205, function(btn)
 end)
 wallCheckBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
 
-createSettingsBtn("Show FOV: OFF", 245, function(btn)
+createSettingsBtn("Show FOV: OFF", 325, function(btn)
 	aimSettings.ShowFOV = not aimSettings.ShowFOV
 	if aimSettings.ShowFOV then
 		btn.Text = "Show FOV: ON"
@@ -263,10 +283,10 @@ createSettingsBtn("Show FOV: OFF", 245, function(btn)
 	end
 end)
 
--- [НОВОЕ] Настройка размера FOV через TextBox
+-- Настройка размера FOV через TextBox
 local fovFrame = Instance.new("Frame")
 fovFrame.Size = UDim2.new(1, -20, 0, 35)
-fovFrame.Position = UDim2.new(0, 10, 0, 285)
+fovFrame.Position = UDim2.new(0, 10, 0, 365)
 fovFrame.BackgroundTransparency = 1
 fovFrame.Parent = aimMenu
 
@@ -298,17 +318,59 @@ fovInputStroke.Parent = fovInput
 fovInput.FocusLost:Connect(function()
 	local newRadius = tonumber(fovInput.Text)
 	if newRadius then
-		aimSettings.FOVRadius = math.clamp(newRadius, 10, 1500) -- Ограничиваем от 10 до 1500
+		aimSettings.FOVRadius = math.clamp(newRadius, 10, 1500)
 	end
 	fovInput.Text = tostring(aimSettings.FOVRadius)
 	fovCircle.Size = UDim2.new(0, aimSettings.FOVRadius * 2, 0, aimSettings.FOVRadius * 2)
 end)
 
--- ==========================================
--- 7. ЛОГИКА ОТКРЫТИЯ МЕНЮ НАСТРОЕК
--- ==========================================
 settingsBtn.Activated:Connect(function()
 	toggleAimMenu()
+end)
+
+-- ==========================================
+-- 7. ОБРАБОТКА ВВОДА (БИНДЫ И РЕЖИМЫ)
+-- ==========================================
+local function handleInputMatch(input)
+	if input.UserInputType == Enum.UserInputType.Keyboard and aimSettings.Bind == input.KeyCode then return true end
+	if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 or input.UserInputType == Enum.UserInputType.MouseButton3) and aimSettings.Bind == input.UserInputType then return true end
+	return false
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	-- Логика назначения новой клавиши/кнопки
+	if waitBind then
+		if input.UserInputType == Enum.UserInputType.Keyboard then
+			aimSettings.Bind = input.KeyCode
+			bindBtn.Text = "Bind: " .. input.KeyCode.Name
+			bindBtn.TextColor3 = Color3.fromRGB(200, 200, 205)
+			waitBind = false
+		elseif input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 or input.UserInputType == Enum.UserInputType.MouseButton3 then
+			aimSettings.Bind = input.UserInputType
+			bindBtn.Text = "Bind: " .. input.UserInputType.Name
+			bindBtn.TextColor3 = Color3.fromRGB(200, 200, 205)
+			waitBind = false
+		end
+		return
+	end
+	
+	if gameProcessed or not aimSettings.Enabled then return end
+	
+	if handleInputMatch(input) then
+		if aimSettings.Mode == "Toggle" then
+			isAiming = not isAiming
+		elseif aimSettings.Mode == "Hold" then
+			isAiming = true
+		end
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+	if gameProcessed or waitBind or not aimSettings.Enabled then return end
+	
+	if aimSettings.Mode == "Hold" and handleInputMatch(input) then
+		isAiming = false
+	end
 end)
 
 -- ==========================================
@@ -384,6 +446,9 @@ local function getClosestPlayer()
 	return closestPlayer
 end
 
+-- ==========================================
+-- 9. ОСНОВНОЙ ПЕРЕКЛЮЧАТЕЛЬ АИМБОТА
+-- ==========================================
 aimBtn.Activated:Connect(function()
 	aimSettings.Enabled = not aimSettings.Enabled
 	
@@ -392,8 +457,10 @@ aimBtn.Activated:Connect(function()
 		aimLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
 		aimBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
 		
-		aimConnection = RunService.RenderStepped:Connect(function()
-			if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+		-- [ФИКС ОРУЖИЯ] Используем BindToRenderStep с приоритетом ВЫШЕ, чем у камеры Роблокса
+		-- Это гарантирует, что Aimbot перекроет отдачу и скрипты оружия, обновляющие камеру
+		RunService:BindToRenderStep("FusionHubAimbotPriority", Enum.RenderPriority.Camera.Value + 200, function()
+			if isAiming then
 				local targetChar = getClosestPlayer()
 				local currentCamera = Workspace.CurrentCamera 
 				
@@ -410,10 +477,9 @@ aimBtn.Activated:Connect(function()
 		aimLabel.Text = "Aimbot: OFF"
 		aimLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
 		aimBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		isAiming = false
 		
-		if aimConnection then
-			aimConnection:Disconnect()
-			aimConnection = nil
-		end
+		-- Очищаем цикл
+		pcall(function() RunService:UnbindFromRenderStep("FusionHubAimbotPriority") end)
 	end
 end)
