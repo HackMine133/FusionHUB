@@ -32,11 +32,14 @@ local aimSettings = {
 	FOVRadius = 150,
 	WallCheck = true,
 	Bind = Enum.UserInputType.MouseButton2,
-	Mode = "Hold"
+	Mode = "Hold",
+	IgnoreFF = true,  -- Фильтр ForceField
+	AutoShoot = false -- Авто-выстрел (зажатие ЛКМ)
 }
 
 local isAiming = false
 local waitBind = false
+local isShooting = false -- Статус для авто-зажатия ЛКМ
 
 -- ==========================================
 -- 2. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
@@ -141,7 +144,8 @@ end)
 -- ==========================================
 -- 6. МЕНЮ НАСТРОЕК AIMBOT
 -- ==========================================
-local settingsAPI = _G.FusionHub.CreateAddonSettings("Aimbot Settings", 250, 420)
+-- Увеличена высота окна до 500 для новых кнопок
+local settingsAPI = _G.FusionHub.CreateAddonSettings("Aimbot Settings", 250, 500)
 local aimMenu = settingsAPI.Window
 local toggleAimMenu = settingsAPI.ToggleFunction
 
@@ -320,6 +324,31 @@ fovInput.FocusLost:Connect(function()
 	fovCircle.Size = UDim2.new(0, aimSettings.FOVRadius * 2, 0, aimSettings.FOVRadius * 2)
 end)
 
+-- НОВАЯ КНОПКА: Игнор FF (ForceField)
+local ignoreFFBtn = createSettingsBtn("Ignore FF: ON", 405, function(btn)
+	aimSettings.IgnoreFF = not aimSettings.IgnoreFF
+	if aimSettings.IgnoreFF then
+		btn.Text = "Ignore FF: ON"
+		btn.TextColor3 = Color3.fromRGB(150, 255, 150)
+	else
+		btn.Text = "Ignore FF: OFF"
+		btn.TextColor3 = Color3.fromRGB(200, 200, 205)
+	end
+end)
+ignoreFFBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
+
+-- НОВАЯ КНОПКА: Авто-зажатие ЛКМ
+local autoShootBtn = createSettingsBtn("Auto-Shoot: OFF", 445, function(btn)
+	aimSettings.AutoShoot = not aimSettings.AutoShoot
+	if aimSettings.AutoShoot then
+		btn.Text = "Auto-Shoot: ON"
+		btn.TextColor3 = Color3.fromRGB(150, 255, 150)
+	else
+		btn.Text = "Auto-Shoot: OFF"
+		btn.TextColor3 = Color3.fromRGB(200, 200, 205)
+	end
+end)
+
 settingsBtn.Activated:Connect(function()
 	toggleAimMenu()
 end)
@@ -351,7 +380,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	
 	if not aimSettings.Enabled then return end
 	
-	-- УБРАНА проверка gameProcessed для бинда, чтобы игра не перебивала ПКМ
 	if handleInputMatch(input) then
 		if aimSettings.Mode == "Toggle" then
 			isAiming = not isAiming
@@ -431,6 +459,11 @@ local function getClosestPlayer()
 				end
 				
 				if isAlive then
+					-- Проверка на ForceField
+					if aimSettings.IgnoreFF and char:FindFirstChildWhichIsA("ForceField") then
+						continue -- Пропускаем игрока, пока у него есть бессмертие
+					end
+					
 					local targetPart = getTargetPart(char)
 					
 					if targetPart then
@@ -466,7 +499,6 @@ aimBtn.Activated:Connect(function()
 		
 		RunService:BindToRenderStep("FusionHubAimbotPriority", Enum.RenderPriority.Camera.Value + 200, function()
 			if isAiming then
-				-- Оборачиваем в pcall для защиты от непредвиденных математических ошибок
 				pcall(function()
 					local targetChar = getClosestPlayer()
 					local currentCamera = Workspace.CurrentCamera 
@@ -474,14 +506,33 @@ aimBtn.Activated:Connect(function()
 					if targetChar and currentCamera then
 						local targetPart = getTargetPart(targetChar)
 						if targetPart then
-							-- Защита от NaN ошибки, если камера в точности пересекается с объектом
 							if (currentCamera.CFrame.Position - targetPart.Position).Magnitude > 0.1 then
 								local targetCFrame = CFrame.new(currentCamera.CFrame.Position, targetPart.Position)
 								currentCamera.CFrame = currentCamera.CFrame:Lerp(targetCFrame, aimSettings.Smoothness)
 							end
 						end
+						
+						-- Логика Авто-зажатия ЛКМ
+						if aimSettings.AutoShoot then
+							if not isShooting and mouse1press then
+								mouse1press()
+								isShooting = true
+							end
+						end
+					else
+						-- Если цель пропала/умерла, отпускаем ЛКМ
+						if isShooting and mouse1release then
+							mouse1release()
+							isShooting = false
+						end
 					end
 				end)
+			else
+				-- Если мы перестали целиться вручную (отпустили кнопку бинда)
+				if isShooting and mouse1release then
+					pcall(mouse1release)
+					isShooting = false
+				end
 			end
 		end)
 	else
@@ -489,6 +540,12 @@ aimBtn.Activated:Connect(function()
 		aimLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
 		aimBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 		isAiming = false
+		
+		-- Отпускаем ЛКМ при отключении аимбота
+		if isShooting and mouse1release then
+			pcall(mouse1release)
+			isShooting = false
+		end
 		
 		pcall(function() RunService:UnbindFromRenderStep("FusionHubAimbotPriority") end)
 	end
