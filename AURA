@@ -6,19 +6,19 @@ local player = Players.LocalPlayer
 -- ==========================================
 -- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
 -- ==========================================
-local playerGui = player:WaitForChild("PlayerGui")[cite: 6, 7]
-local screenGui = playerGui:WaitForChild("FusionHubGui", 10)[cite: 6, 7]
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
 
 if not screenGui then
-	warn("FusionHub не найден! Сначала запусти основной скрипт.")[cite: 6, 7]
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
 	return
 end
 
-local menuGroup = screenGui:WaitForChild("MainMenu")[cite: 6, 7]
-local scrollFrame = menuGroup:WaitForChild("ContentScroll")[cite: 6, 7]
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
 
 if not _G.FusionHub or type(_G.FusionHub.CreateAddonSettings) ~= "function" then
-	warn("Ошибка: API FusionHub не найдено! Убедитесь, что используете Ultimate Version ядра.")[cite: 6]
+	warn("Ошибка: API FusionHub не найдено! Убедитесь, что используете Ultimate Version ядра.")
 	return
 end
 
@@ -29,7 +29,7 @@ local auraSettings = {
 	Enabled = false,
 	Radius = 15,
 	Delay = 0.05,
-	Mode = "ALL", -- "ALL" (Всё сразу) или "RANDOM" (По одному случайно)
+	Mode = "ALL",
 	ShowRadius = true
 }
 
@@ -44,9 +44,9 @@ local visualizer = nil
 -- ==========================================
 local auraRow = Instance.new("Frame")
 auraRow.Name = "AuraRow"
-auraRow.Size = UDim2.new(1, -15, 0, 45)[cite: 6, 7]
-auraRow.BackgroundTransparency = 1[cite: 6, 7]
-auraRow.LayoutOrder = 9 -- Встает после Blink/Teleport
+auraRow.Size = UDim2.new(1, -15, 0, 45)
+auraRow.BackgroundTransparency = 1
+auraRow.LayoutOrder = 9
 auraRow.Parent = scrollFrame
 
 -- ==========================================
@@ -54,28 +54,28 @@ auraRow.Parent = scrollFrame
 -- ==========================================
 local auraBtn = Instance.new("TextButton")
 auraBtn.Name = "AuraToggleButton"
-auraBtn.Size = UDim2.new(1, -55, 1, 0)[cite: 6]
-auraBtn.Position = UDim2.new(0, 0, 0, 0)[cite: 6]
-auraBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)[cite: 6, 7]
-auraBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))[cite: 6]
-auraBtn.Text = ""[cite: 6, 7]
-auraBtn.AutoButtonColor = true[cite: 6, 7]
-auraBtn.Active = true[cite: 6]
+auraBtn.Size = UDim2.new(1, -55, 1, 0)
+auraBtn.Position = UDim2.new(0, 0, 0, 0)
+auraBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+auraBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
+auraBtn.Text = ""
+auraBtn.AutoButtonColor = true
+auraBtn.Active = true
 auraBtn.Parent = auraRow
 
 local auraCorner = Instance.new("UICorner")
-auraCorner.CornerRadius = UDim.new(0, 8)[cite: 6, 7]
+auraCorner.CornerRadius = UDim.new(0, 8)
 auraCorner.Parent = auraBtn
 
 local auraLabel = Instance.new("TextLabel")
-auraLabel.Size = UDim2.new(1, -20, 1, 0)[cite: 6, 7]
-auraLabel.Position = UDim2.new(0, 10, 0, 0)[cite: 6, 7]
-auraLabel.BackgroundTransparency = 1[cite: 6, 7]
+auraLabel.Size = UDim2.new(1, -20, 1, 0)
+auraLabel.Position = UDim2.new(0, 10, 0, 0)
+auraLabel.BackgroundTransparency = 1
 auraLabel.Text = "Aura Interact: OFF"
-auraLabel.Font = Enum.Font.GothamMedium[cite: 6, 7]
-auraLabel.TextColor3 = Color3.fromRGB(240, 240, 245)[cite: 6, 7]
-auraLabel.TextSize = 14[cite: 6, 7]
-auraLabel.TextXAlignment = Enum.TextXAlignment.Left[cite: 6, 7]
+auraLabel.Font = Enum.Font.GothamMedium
+auraLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+auraLabel.TextSize = 14
+auraLabel.TextXAlignment = Enum.TextXAlignment.Left
 auraLabel.Parent = auraBtn
 
 -- ==========================================
@@ -83,30 +83,30 @@ auraLabel.Parent = auraBtn
 -- ==========================================
 local settingsBtn = Instance.new("ImageButton")
 settingsBtn.Name = "AuraSettingsButton"
-settingsBtn.Size = UDim2.new(0, 45, 0, 45)[cite: 6]
-settingsBtn.Position = UDim2.new(1, -45, 0, 0)[cite: 6]
-settingsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)[cite: 6]
-settingsBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))[cite: 6]
-settingsBtn.AutoButtonColor = true[cite: 6]
-settingsBtn.Active = true[cite: 6]
+settingsBtn.Size = UDim2.new(0, 45, 0, 45)
+settingsBtn.Position = UDim2.new(1, -45, 0, 0)
+settingsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+settingsBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
+settingsBtn.AutoButtonColor = true
+settingsBtn.Active = true
 settingsBtn.Parent = auraRow
 
 local settingsCorner = Instance.new("UICorner")
-settingsCorner.CornerRadius = UDim.new(0, 8)[cite: 6]
+settingsCorner.CornerRadius = UDim.new(0, 8)
 settingsCorner.Parent = settingsBtn
 
 local settingsIcon = Instance.new("ImageLabel")
-settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)[cite: 6]
-settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)[cite: 6]
-settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)[cite: 6]
-settingsIcon.BackgroundTransparency = 1[cite: 6]
-settingsIcon.Image = "rbxassetid://9405931578"[cite: 6]
+settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+settingsIcon.BackgroundTransparency = 1
+settingsIcon.Image = "rbxassetid://9405931578"
 settingsIcon.Parent = settingsBtn
 
 -- ==========================================
 -- 6. МЕНЮ НАСТРОЕК AURA
 -- ==========================================
-local settingsAPI = _G.FusionHub.CreateAddonSettings("Aura Settings", 250, 240)[cite: 6]
+local settingsAPI = _G.FusionHub.CreateAddonSettings("Aura Settings", 250, 240)
 local auraMenu = settingsAPI.Window
 settingsBtn.Activated:Connect(settingsAPI.ToggleFunction)
 
@@ -124,7 +124,6 @@ local function createSettingLabel(text, yPos)
 	return lbl
 end
 
--- Радиус (Текстбокс)
 createSettingLabel("Aura Radius (Studs):", 40)
 local radiusBox = Instance.new("TextBox")
 radiusBox.Size = UDim2.new(1, -20, 0, 30)
@@ -141,12 +140,11 @@ Instance.new("UIStroke", radiusBox).Color = Color3.fromRGB(80, 80, 90)
 radiusBox.FocusLost:Connect(function()
 	local num = tonumber(radiusBox.Text)
 	if num then
-		auraSettings.Radius = math.clamp(num, 1, 100) -- Ограничиваем до 100, чтобы не лагало
+		auraSettings.Radius = math.clamp(num, 1, 100)
 	end
 	radiusBox.Text = tostring(auraSettings.Radius)
 end)
 
--- Задержка (Текстбокс)
 createSettingLabel("Click Delay (Seconds):", 95)
 local delayBox = Instance.new("TextBox")
 delayBox.Size = UDim2.new(1, -20, 0, 30)
@@ -168,7 +166,6 @@ delayBox.FocusLost:Connect(function()
 	delayBox.Text = tostring(auraSettings.Delay)
 end)
 
--- Режим (Все / Рандом)
 local modeBtn = Instance.new("TextButton")
 modeBtn.Size = UDim2.new(1, -20, 0, 30)
 modeBtn.Position = UDim2.new(0, 10, 0, 155)
@@ -190,7 +187,6 @@ modeBtn.Activated:Connect(function()
 	modeBtn.Text = "Mode: " .. auraSettings.Mode
 end)
 
--- Визуализатор радиуса
 local visToggleBtn = Instance.new("TextButton")
 visToggleBtn.Size = UDim2.new(1, -20, 0, 30)
 visToggleBtn.Position = UDim2.new(0, 10, 0, 195)
@@ -270,7 +266,6 @@ local function stopAura()
 end
 
 local function startAura()
-	-- 1. Цикл кэширования (сканирует карту раз в 2 секунды, чтобы не лагать)
 	cacheConnection = task.spawn(function()
 		while auraSettings.Enabled do
 			local newCache = {}
@@ -284,14 +279,12 @@ local function startAura()
 		end
 	end)
 
-	-- 2. Цикл взаимодействия (быстрый, зависит от Delay)
 	auraConnection = task.spawn(function()
 		while auraSettings.Enabled do
 			local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 			if hrp then
 				local targets = {}
 				
-				-- Фильтруем кэш по дистанции
 				for _, obj in ipairs(interactablesCache) do
 					if obj.Parent and obj.Parent:IsA("BasePart") then
 						local dist = (hrp.Position - obj.Parent.Position).Magnitude
@@ -305,7 +298,6 @@ local function startAura()
 					end
 				end
 
-				-- Активируем объекты
 				if #targets > 0 then
 					if auraSettings.Mode == "ALL" then
 						for _, t in ipairs(targets) do
@@ -338,30 +330,26 @@ auraBtn.Activated:Connect(function()
 	auraSettings.Enabled = not auraSettings.Enabled
 	
 	if auraSettings.Enabled then
-		-- Включение
 		auraLabel.Text = "Aura Interact: ON"
-		auraLabel.TextColor3 = Color3.fromRGB(150, 255, 150)[cite: 6, 7]
-		auraBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)[cite: 6, 7]
-		auraBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))[cite: 6]
+		auraLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+		auraBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+		auraBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))
 		
 		startAura()
 		updateVisualizer()
 	else
-		-- Выключение
 		auraLabel.Text = "Aura Interact: OFF"
-		auraLabel.TextColor3 = Color3.fromRGB(240, 240, 245)[cite: 6, 7]
-		auraBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)[cite: 6, 7]
-		auraBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))[cite: 6]
+		auraLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		auraBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+		auraBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
 		
 		stopAura()
 		updateVisualizer()
 	end
 end)
 
--- Безопасное отключение при смерти/спавне
 player.CharacterAdded:Connect(function()
 	if auraSettings.Enabled then
-		-- Перезапуск ауры, чтобы она обновила привязку к новому HumanoidRootPart
 		stopAura()
 		task.wait(0.5)
 		startAura()
