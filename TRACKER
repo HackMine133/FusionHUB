@@ -30,6 +30,7 @@ end
 local trkSet = {
 	Active = false,
 	TeamCheck = true,
+	ShowArrows = true, -- Новая настройка для стрелок-индикаторов
 	FovAngle = 20 -- Угол "взгляда" (в градусах). 20 - оптимально для защиты от анимаций
 }
 
@@ -96,7 +97,8 @@ sIcon.Parent = setBtn
 -- ==========================================
 -- 4. МЕНЮ НАСТРОЕК
 -- ==========================================
-local tAPI = _G.FusionHub.CreateAddonSettings("Tracker Settings", 250, 180)
+-- Увеличил высоту меню до 220, чтобы вместить новую кнопку
+local tAPI = _G.FusionHub.CreateAddonSettings("Tracker Settings", 250, 220)
 local tMenu = tAPI.Window
 
 setBtn.Activated:Connect(tAPI.ToggleFunction)
@@ -122,10 +124,31 @@ teamBtn.Activated:Connect(function()
 	teamBtn:SetAttribute("OriginalColor", newColor)
 end)
 
+-- Новая кнопка: Показывать направляющие стрелки
+local arrowBtn = Instance.new("TextButton")
+arrowBtn.Size = UDim2.new(1, -20, 0, 35)
+arrowBtn.Position = UDim2.new(0, 10, 0, 95)
+arrowBtn.BackgroundColor3 = trkSet.ShowArrows and Color3.fromRGB(45, 120, 45) or Color3.fromRGB(180, 45, 45)
+arrowBtn:SetAttribute("OriginalColor", arrowBtn.BackgroundColor3)
+arrowBtn.Text = "Direction Arrows: " .. (trkSet.ShowArrows and "ON" or "OFF")
+arrowBtn.Font = Enum.Font.GothamBold
+arrowBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+arrowBtn.TextSize = 12
+arrowBtn.Parent = tMenu
+Instance.new("UICorner", arrowBtn).CornerRadius = UDim.new(0, 6)
+
+arrowBtn.Activated:Connect(function()
+	trkSet.ShowArrows = not trkSet.ShowArrows
+	arrowBtn.Text = "Direction Arrows: " .. (trkSet.ShowArrows and "ON" or "OFF")
+	local newColor = trkSet.ShowArrows and Color3.fromRGB(45, 120, 45) or Color3.fromRGB(180, 45, 45)
+	arrowBtn.BackgroundColor3 = newColor
+	arrowBtn:SetAttribute("OriginalColor", newColor)
+end)
+
 -- Настройка угла (FOV)
 local fovLabel = Instance.new("TextLabel")
 fovLabel.Size = UDim2.new(1, -20, 0, 20)
-fovLabel.Position = UDim2.new(0, 10, 0, 95)
+fovLabel.Position = UDim2.new(0, 10, 0, 140)
 fovLabel.BackgroundTransparency = 1
 fovLabel.Text = "Field of View (Degrees):"
 fovLabel.Font = Enum.Font.Gotham
@@ -136,7 +159,7 @@ fovLabel.Parent = tMenu
 
 local fovBox = Instance.new("TextBox")
 fovBox.Size = UDim2.new(1, -20, 0, 30)
-fovBox.Position = UDim2.new(0, 10, 0, 120)
+fovBox.Position = UDim2.new(0, 10, 0, 165)
 fovBox.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 fovBox.Text = tostring(trkSet.FovAngle)
 fovBox.Font = Enum.Font.GothamBold
@@ -157,6 +180,13 @@ end)
 -- ==========================================
 -- 5. ВИЗУАЛЬНЫЕ ЭЛЕМЕНТЫ ТРЕКЕРА
 -- ==========================================
+-- Контейнер для стрелок
+local arrowContainer = Instance.new("Frame")
+arrowContainer.Name = "TrackerArrowsContainer"
+arrowContainer.Size = UDim2.new(1, 0, 1, 0)
+arrowContainer.BackgroundTransparency = 1
+arrowContainer.Parent = fGui
+
 -- Текст-предупреждение на экране
 local screenAlert = Instance.new("TextLabel")
 screenAlert.Size = UDim2.new(1, 0, 0, 50)
@@ -193,6 +223,7 @@ local function clearPlayerTracker(p)
 		if activeTrackers[p].Beam then activeTrackers[p].Beam:Destroy() end
 		if activeTrackers[p].Att then activeTrackers[p].Att:Destroy() end
 		if activeTrackers[p].Hl then activeTrackers[p].Hl:Destroy() end
+		if activeTrackers[p].Arrow then activeTrackers[p].Arrow:Destroy() end -- Удаляем стрелку при очистке
 		activeTrackers[p] = nil
 	end
 end
@@ -210,6 +241,7 @@ local function toggleTracker(state)
 		trkConnection = tRunSvc.RenderStepped:Connect(function()
 			-- Обновляем позицию начала лазера (чуть ниже камеры, чтобы не перекрывать прицел)
 			originPart.CFrame = workspace.CurrentCamera.CFrame * CFrame.new(0, -0.8, 0)
+			local cam = workspace.CurrentCamera
 			
 			local lookers = {}
 			local myChar = lClient.Character
@@ -228,10 +260,17 @@ local function toggleTracker(state)
 								isEnemy = false
 							end
 							
+							-- ИНТЕГРАЦИЯ ВАЙТЛИСТА (Если включен)
+							if _G.FusionHubWhitelistEnabled and _G.FusionHubWhitelist then
+								for _, wlName in ipairs(_G.FusionHubWhitelist) do
+									if p.Name == wlName then isEnemy = false break end
+								end
+							end
+							
 							if isEnemy then
 								-- Математика: вычисляем, смотрит ли вектор головы врага в нашу сторону
 								local dirToMe = (myHead.Position - pChar.Head.Position).Unit
-								-- Используем HumanoidRootPart для большей стабильности (не дергается от анимаций дыхания)
+								-- Используем HumanoidRootPart для большей стабильности
 								local enemyRoot = pChar:FindFirstChild("HumanoidRootPart")
 								local aimPart = enemyRoot or pChar.Head
 								
@@ -245,12 +284,10 @@ local function toggleTracker(state)
 									
 									local rayParams = RaycastParams.new()
 									rayParams.FilterType = Enum.RaycastFilterType.Exclude
-									-- Игнорируем модель врага и нашу модель, чтобы лучи не блокировались телом/шляпами
 									rayParams.FilterDescendantsInstances = {myChar, pChar}
 									
 									local rayResult = workspace:Raycast(rayOrigin, rayDirection, rayParams)
 									
-									-- Если луч ничего не встретил на пути до нашей головы (нет стен)
 									if not rayResult then
 										isLooking = true
 										table.insert(lookers, p.DisplayName)
@@ -270,8 +307,8 @@ local function toggleTracker(state)
 								beam.Attachment1 = att
 								beam.FaceCamera = true
 								beam.Color = ColorSequence.new(Color3.fromRGB(255, 40, 40))
-								beam.Width0 = 0.05 -- Тонкий у камеры
-								beam.Width1 = 0.4  -- Широкий на враге
+								beam.Width0 = 0.05
+								beam.Width1 = 0.4
 								beam.Transparency = NumberSequence.new(0.1)
 								beam.LightEmission = 1
 								beam.LightInfluence = 0
@@ -284,15 +321,59 @@ local function toggleTracker(state)
 								hl.OutlineTransparency = 0.1
 								hl.Parent = p.Character
 								
-								activeTrackers[p] = {Beam = beam, Att = att, Hl = hl}
+								-- Создаем 2D-Стрелку
+								local arrow = Instance.new("ImageLabel")
+								arrow.Size = UDim2.new(0, 35, 0, 35)
+								arrow.AnchorPoint = Vector2.new(0.5, 0.5)
+								arrow.BackgroundTransparency = 1
+								arrow.Image = "rbxassetid://3594042296" -- ID красивого белого треугольника
+								arrow.ImageColor3 = Color3.fromRGB(255, 40, 40)
+								arrow.Parent = arrowContainer
+								
+								local aStroke = Instance.new("UIStroke")
+								aStroke.Color = Color3.fromRGB(0, 0, 0)
+								aStroke.Thickness = 1.5
+								aStroke.Parent = arrow
+								
+								activeTrackers[p] = {Beam = beam, Att = att, Hl = hl, Arrow = arrow}
 							else
-								-- Защита от багов перерождения врага: возвращаем элементы на место
+								-- Защита от багов перерождения врага
 								if activeTrackers[p].Att.Parent ~= p.Character.Head then
 									activeTrackers[p].Att.Parent = p.Character.Head
 								end
 								if activeTrackers[p].Hl.Parent ~= p.Character then
 									activeTrackers[p].Hl.Parent = p.Character
 								end
+							end
+							
+							-- ОБНОВЛЕНИЕ СТРЕЛКИ НА ЭКРАНЕ
+							if trkSet.ShowArrows and activeTrackers[p].Arrow then
+								activeTrackers[p].Arrow.Visible = true
+								
+								local tPos = p.Character.Head.Position
+								local vec, onScreen = cam:WorldToViewportPoint(tPos)
+								local center = cam.ViewportSize / 2
+								
+								-- Смещения от центра экрана
+								local dx = vec.X - center.X
+								local dy = vec.Y - center.Y
+								
+								-- Если враг за камерой (Z < 0), инвертируем координаты, чтобы стрелка указывала назад
+								if vec.Z < 0 then
+									dx = -dx
+									dy = -dy
+								end
+								
+								-- Математика угла (в радианах)
+								local angle = math.atan2(dy, dx)
+								local radius = 220 -- Радиус отдаления стрелки от центра прицела
+								
+								activeTrackers[p].Arrow.Position = UDim2.new(0.5, math.cos(angle) * radius, 0.5, math.sin(angle) * radius)
+								
+								-- Треугольник изначально смотрит ВВЕРХ, а atan2(0) это ВПРАВО, поэтому прибавляем 90 градусов
+								activeTrackers[p].Arrow.Rotation = math.deg(angle) + 90
+							else
+								activeTrackers[p].Arrow.Visible = false
 							end
 						else
 							clearPlayerTracker(p)
