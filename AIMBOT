@@ -40,7 +40,7 @@ local aimSettings = {
 
 local isAiming = false
 local waitBind = false
-local isShooting = false -- Статус для авто-выстрела
+local isShooting = false 
 
 -- ==========================================
 -- 2. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
@@ -143,34 +143,54 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ==========================================
--- 6. МЕНЮ НАСТРОЕК AIMBOT (С ПРОЛИСТЫВАНИЕМ)
+-- 6. МЕНЮ НАСТРОЕК (ДИНАМИЧЕСКИЙ СКРОЛЛ)
 -- ==========================================
 local settingsAPI = _G.FusionHub.CreateAddonSettings("Aimbot Settings", 250, 420)
 local aimMenu = settingsAPI.Window
 local toggleAimMenu = settingsAPI.ToggleFunction
 
--- Создаем скролл-зону для настроек, чтобы не зависеть от высоты окна
+-- Создаем умную зону прокрутки
 local aimScroll = Instance.new("ScrollingFrame")
 aimScroll.Name = "SettingsScroll"
 aimScroll.Size = UDim2.new(1, 0, 1, -40) 
 aimScroll.Position = UDim2.new(0, 0, 0, 40)
 aimScroll.BackgroundTransparency = 1
 aimScroll.BorderSizePixel = 0
-aimScroll.ScrollBarThickness = 4
+aimScroll.ScrollBarThickness = 5
 aimScroll.ScrollBarImageColor3 = Color3.fromRGB(200, 200, 205)
-aimScroll.CanvasSize = UDim2.new(0, 0, 0, 500) -- Увеличил размер холста до 500
+aimScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+aimScroll.Active = true
 aimScroll.Parent = aimMenu
 
-local function createSettingsBtn(text, posY, callback)
+-- Автоматический распределитель (решает проблему с размером холста)
+local listLayout = Instance.new("UIListLayout")
+listLayout.Parent = aimScroll
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, 5) -- Отступ между кнопками
+listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+-- Отступы сверху и снизу
+local uiPadding = Instance.new("UIPadding")
+uiPadding.Parent = aimScroll
+uiPadding.PaddingTop = UDim.new(0, 5)
+uiPadding.PaddingBottom = UDim.new(0, 10)
+
+-- Динамическое обновление высоты прокрутки! 
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	aimScroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 20)
+end)
+
+-- Обновленная функция создания кнопок (использует LayoutOrder вместо координат)
+local function createSettingsBtn(text, order, callback)
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(1, -20, 0, 35)
-	btn.Position = UDim2.new(0, 10, 0, posY)
 	btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 	btn.Text = text
 	btn.Font = Enum.Font.GothamMedium
 	btn.TextColor3 = Color3.fromRGB(200, 200, 205)
 	btn.TextSize = 13
 	btn.Active = true
+	btn.LayoutOrder = order
 	btn.Parent = aimScroll 
 	
 	local corner = Instance.new("UICorner")
@@ -181,13 +201,14 @@ local function createSettingsBtn(text, posY, callback)
 	return btn
 end
 
-local bindBtn = createSettingsBtn("Bind: " .. aimSettings.Bind.Name, 5, function(btn)
+-- Создаем кнопки строго по порядку (LayoutOrder 1-12)
+local bindBtn = createSettingsBtn("Bind: " .. aimSettings.Bind.Name, 1, function(btn)
 	waitBind = true
 	btn.Text = "Press any key/mouse..."
 	btn.TextColor3 = Color3.fromRGB(255, 200, 100)
 end)
 
-local modeBtn = createSettingsBtn("Mode: " .. aimSettings.Mode, 45, function(btn)
+local modeBtn = createSettingsBtn("Mode: " .. aimSettings.Mode, 2, function(btn)
 	if aimSettings.Mode == "Hold" then
 		aimSettings.Mode = "Toggle"
 	else
@@ -196,7 +217,7 @@ local modeBtn = createSettingsBtn("Mode: " .. aimSettings.Mode, 45, function(btn
 	btn.Text = "Mode: " .. aimSettings.Mode
 end)
 
-createSettingsBtn("Target: " .. aimSettings.AimPart, 85, function(btn)
+createSettingsBtn("Target: " .. aimSettings.AimPart, 3, function(btn)
 	if aimSettings.AimPart == "Head" then
 		aimSettings.AimPart = "HumanoidRootPart"
 		btn.Text = "Target: Torso"
@@ -213,14 +234,14 @@ local smoothModes = {
 }
 local smoothIndex = 1
 
-createSettingsBtn("Speed: " .. smoothModes[smoothIndex].name, 125, function(btn)
+createSettingsBtn("Speed: " .. smoothModes[smoothIndex].name, 4, function(btn)
 	smoothIndex = smoothIndex + 1
 	if smoothIndex > #smoothModes then smoothIndex = 1 end
 	aimSettings.Smoothness = smoothModes[smoothIndex].value
 	btn.Text = "Speed: " .. smoothModes[smoothIndex].name
 end)
 
-createSettingsBtn("Team Check: OFF", 165, function(btn)
+createSettingsBtn("Team Check: OFF", 5, function(btn)
 	aimSettings.TeamCheck = not aimSettings.TeamCheck
 	if aimSettings.TeamCheck then
 		btn.Text = "Team Check: ON (Ignore Own)"
@@ -231,7 +252,7 @@ createSettingsBtn("Team Check: OFF", 165, function(btn)
 	end
 end)
 
-createSettingsBtn("Target Team: All", 205, function(btn)
+createSettingsBtn("Target Team: All", 6, function(btn)
 	local availableTeams = {"All"}
 	local foundTeams = {}
 	
@@ -273,7 +294,7 @@ createSettingsBtn("Target Team: All", 205, function(btn)
 	end
 end)
 
-local wallCheckBtn = createSettingsBtn("Wall Check: ON", 245, function(btn)
+local wallCheckBtn = createSettingsBtn("Wall Check: ON", 7, function(btn)
 	aimSettings.WallCheck = not aimSettings.WallCheck
 	if aimSettings.WallCheck then
 		btn.Text = "Wall Check: ON"
@@ -285,7 +306,7 @@ local wallCheckBtn = createSettingsBtn("Wall Check: ON", 245, function(btn)
 end)
 wallCheckBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
 
-createSettingsBtn("Show FOV: OFF", 285, function(btn)
+createSettingsBtn("Show FOV: OFF", 8, function(btn)
 	aimSettings.ShowFOV = not aimSettings.ShowFOV
 	if aimSettings.ShowFOV then
 		btn.Text = "Show FOV: ON"
@@ -296,10 +317,11 @@ createSettingsBtn("Show FOV: OFF", 285, function(btn)
 	end
 end)
 
+-- Поле для настройки FOV
 local fovFrame = Instance.new("Frame")
 fovFrame.Size = UDim2.new(1, -20, 0, 35)
-fovFrame.Position = UDim2.new(0, 10, 0, 325)
 fovFrame.BackgroundTransparency = 1
+fovFrame.LayoutOrder = 9
 fovFrame.Parent = aimScroll
 
 local fovLabel = Instance.new("TextLabel")
@@ -337,7 +359,7 @@ fovInput.FocusLost:Connect(function()
 end)
 
 -- Игнор FF (ForceField)
-local ignoreFFBtn = createSettingsBtn("Ignore FF: ON", 365, function(btn)
+local ignoreFFBtn = createSettingsBtn("Ignore FF: ON", 10, function(btn)
 	aimSettings.IgnoreFF = not aimSettings.IgnoreFF
 	if aimSettings.IgnoreFF then
 		btn.Text = "Ignore FF: ON"
@@ -350,7 +372,7 @@ end)
 ignoreFFBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
 
 -- Авто-выстрел (ВКЛ/ВЫКЛ)
-local autoShootBtn = createSettingsBtn("Auto-Shoot: OFF", 405, function(btn)
+local autoShootBtn = createSettingsBtn("Auto-Shoot: OFF", 11, function(btn)
 	aimSettings.AutoShoot = not aimSettings.AutoShoot
 	if aimSettings.AutoShoot then
 		btn.Text = "Auto-Shoot: ON"
@@ -361,12 +383,12 @@ local autoShootBtn = createSettingsBtn("Auto-Shoot: OFF", 405, function(btn)
 	end
 end)
 
--- НОВАЯ КНОПКА: Режим Авто-выстрела (Зажим / Спам)
-local autoShootModeBtn = createSettingsBtn("Shoot Mode: Hold", 445, function(btn)
+-- Режим Авто-выстрела (Зажим / Спам)
+local autoShootModeBtn = createSettingsBtn("Shoot Mode: Hold", 12, function(btn)
 	if aimSettings.AutoShootMode == "Hold" then
 		aimSettings.AutoShootMode = "Spam"
 		btn.Text = "Shoot Mode: Spam"
-		btn.TextColor3 = Color3.fromRGB(255, 150, 150) -- Красный цвет для спама
+		btn.TextColor3 = Color3.fromRGB(255, 150, 150)
 	else
 		aimSettings.AutoShootMode = "Hold"
 		btn.Text = "Shoot Mode: Hold"
@@ -540,18 +562,15 @@ aimBtn.Activated:Connect(function()
 						-- Логика Авто-выстрела (Hold или Spam)
 						if aimSettings.AutoShoot then
 							if aimSettings.AutoShootMode == "Hold" then
-								-- Режим зажатия
 								if not isShooting and mouse1press then
 									mouse1press()
 									isShooting = true
 								end
 							elseif aimSettings.AutoShootMode == "Spam" then
-								-- Режим спама (клики каждый кадр)
 								if mouse1click then
 									mouse1click()
 								elseif mouse1press and mouse1release then
 									mouse1press()
-									-- Вызываем release микро-задержкой, чтобы Роблокс 100% его зарегистрировал
 									task.spawn(function()
 										task.wait()
 										mouse1release()
@@ -569,7 +588,7 @@ aimBtn.Activated:Connect(function()
 					end
 				end)
 			else
-				-- Если мы перестали целиться вручную (отпустили кнопку бинда)
+				-- Если мы перестали целиться вручную
 				if isShooting and mouse1release then
 					pcall(mouse1release)
 					isShooting = false
