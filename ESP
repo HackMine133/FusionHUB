@@ -15,6 +15,21 @@ if not screenGui then
 	return
 end
 
+-- ==========================================
+-- БЕЗОПАСНОЕ ХРАНИЛИЩЕ ДЛЯ ESP (ОБХОД АНТИЧИТА)
+-- ==========================================
+-- Пытаемся использовать CoreGui (недоступен обычным скриптам игры), 
+-- иначе прячем в самом интерфейсе FusionHubGui
+local success, coreGui = pcall(function() return game:GetService("CoreGui") end)
+local safeContainer = success and coreGui or screenGui
+
+local espFolder = safeContainer:FindFirstChild("FusionESP_Highlights")
+if not espFolder then
+	espFolder = Instance.new("Folder")
+	espFolder.Name = "FusionESP_Highlights"
+	espFolder.Parent = safeContainer
+end
+
 local menuGroup = screenGui:WaitForChild("MainMenu")
 local scrollFrame = menuGroup:WaitForChild("ContentScroll")
 
@@ -25,9 +40,9 @@ local espSettings = {
 	Enabled = false,
 	Mode = "All", 
 	TargetName = "",
-	Color = Color3.fromRGB(255, 50, 50), -- Базовый цвет (или цвет за стеной)
-	WallCheck = false,                   -- Проверка видимости
-	VisibleColor = Color3.fromRGB(50, 255, 50) -- Цвет при прямой видимости
+	Color = Color3.fromRGB(255, 50, 50),
+	WallCheck = false,
+	VisibleColor = Color3.fromRGB(50, 255, 50)
 }
 
 local espObjects = {}
@@ -88,16 +103,13 @@ settingsIcon.Image = "rbxassetid://9405931578"
 settingsIcon.Parent = settingsBtn
 
 -- ==========================================
--- 3. ИСПОЛЬЗОВАНИЕ API FUSIONHUB ДЛЯ ОКНА НАСТРОЕК
+-- 3. ИСПОЛЬЗОВАНИЕ API FUSIONHUB
 -- ==========================================
--- Запрашиваем окно через встроенный метод, начальная высота 290
 local settingsAPI = _G.FusionHub.CreateAddonSettings("ESP Settings", 260, 290)
 local espMenu = settingsAPI.Window
 
--- Привязываем открытие/закрытие окна к шестеренке
 settingsBtn.Activated:Connect(settingsAPI.ToggleFunction)
 
--- Контейнер для элементов внутри окна (с UIListLayout для удобства)
 local container = Instance.new("Frame")
 container.Size = UDim2.new(1, -20, 1, -50)
 container.Position = UDim2.new(0, 10, 0, 45)
@@ -112,7 +124,6 @@ layout.Parent = container
 -- ==========================================
 -- 4. НАПОЛНЕНИЕ МЕНЮ НАСТРОЕК
 -- ==========================================
--- 4.1 Режим ESP
 local modeBtn = Instance.new("TextButton")
 modeBtn.Size = UDim2.new(1, 0, 0, 35)
 modeBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
@@ -124,7 +135,6 @@ modeBtn.LayoutOrder = 1
 modeBtn.Parent = container
 Instance.new("UICorner", modeBtn).CornerRadius = UDim.new(0, 6)
 
--- 4.2 Поле для цели (скрыто по умолчанию)
 local targetBox = Instance.new("TextBox")
 targetBox.Size = UDim2.new(1, 0, 0, 35)
 targetBox.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
@@ -139,7 +149,6 @@ targetBox.Parent = container
 Instance.new("UICorner", targetBox).CornerRadius = UDim.new(0, 6)
 Instance.new("UIStroke", targetBox).Color = Color3.fromRGB(100, 100, 110)
 
--- Вспомогательная функция для текста
 local function createLabel(text, order)
 	local lbl = Instance.new("TextLabel")
 	lbl.Size = UDim2.new(1, 0, 0, 18)
@@ -154,7 +163,6 @@ local function createLabel(text, order)
 	return lbl
 end
 
--- Вспомогательная функция для палитры
 local function createColorPalette(order, onSelect)
 	local frame = Instance.new("Frame")
 	frame.Size = UDim2.new(1, 0, 0, 30)
@@ -192,7 +200,6 @@ local function createColorPalette(order, onSelect)
 	return frame
 end
 
--- 4.3 Тогл Wall Check (Проверка видимости)
 local wallCheckBtn = Instance.new("TextButton")
 wallCheckBtn.Size = UDim2.new(1, 0, 0, 35)
 wallCheckBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
@@ -204,11 +211,9 @@ wallCheckBtn.LayoutOrder = 3
 wallCheckBtn.Parent = container
 Instance.new("UICorner", wallCheckBtn).CornerRadius = UDim.new(0, 6)
 
--- 4.4 Палитра 1 (Базовый цвет / За стеной)
 local defaultColorLabel = createLabel("Default / Wall Color:", 4)
 local palette1 = createColorPalette(5, function(c) espSettings.Color = c end)
 
--- 4.5 Палитра 2 (В зоне видимости) - Скрыто по умолчанию
 local visibleColorLabel = createLabel("Visible Color:", 6)
 visibleColorLabel.Visible = false
 local palette2 = createColorPalette(7, function(c) espSettings.VisibleColor = c end)
@@ -217,7 +222,6 @@ palette2.Visible = false
 -- ==========================================
 -- 5. ЛОГИКА UI НАСТРОЕК
 -- ==========================================
--- Смена режимов
 modeBtn.Activated:Connect(function()
 	local availableModes = {"All", "Enemies"}
 	local foundTeams = {}
@@ -248,7 +252,6 @@ modeBtn.Activated:Connect(function()
 	elseif newMode == "Target" then modeBtn.Text = "Mode: Target"
 	else modeBtn.Text = "Команда: " .. string.sub(newMode, 6) end
 	
-	-- Анимация размера, если поле цели появилось/исчезло
 	local height = 290
 	if targetBox.Visible then height = height + 43 end
 	if espSettings.WallCheck then height = height + 56 end
@@ -259,7 +262,6 @@ targetBox.FocusLost:Connect(function()
 	espSettings.TargetName = string.lower(targetBox.Text)
 end)
 
--- Переключатель Wall Check
 wallCheckBtn.Activated:Connect(function()
 	espSettings.WallCheck = not espSettings.WallCheck
 	
@@ -277,7 +279,6 @@ wallCheckBtn.Activated:Connect(function()
 		palette2.Visible = false
 	end
 	
-	-- Пересчет высоты меню
 	local height = 290
 	if targetBox.Visible then height = height + 43 end
 	if espSettings.WallCheck then height = height + 56 end
@@ -292,32 +293,31 @@ local function clearESP()
 		if highlight then highlight:Destroy() end
 	end
 	table.clear(espObjects)
+	espFolder:ClearAllChildren()
 end
 
--- Функция проверки на видимость (Raycast)
 local function isCharacterVisible(targetChar)
 	local camera = workspace.CurrentCamera
 	local origin = camera.CFrame.Position
-	local targetPart = targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild("Head") or targetChar:FindFirstChild("Torso")
+	
+	-- Умный поиск части для проверки видимости
+	local targetPart = targetChar.PrimaryPart or targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild("Head") or targetChar:FindFirstChildWhichIsA("BasePart")
 	
 	if not targetPart then return false end
 	
 	local direction = (targetPart.Position - origin)
-	
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	-- Игнорируем камеру и своего персонажа
 	rayParams.FilterDescendantsInstances = {camera, player.Character}
 	rayParams.IgnoreWater = true
 	
-	-- Немного удлиняем вектор, чтобы гарантированно достать до центра детали
 	local result = workspace:Raycast(origin, direction.Unit * (direction.Magnitude + 1), rayParams)
 	
 	if result and result.Instance and result.Instance:IsDescendantOf(targetChar) then
-		return true -- Луч достиг персонажа (он видимый)
+		return true
 	end
 	
-	return false -- Луч врезался в стену или препятствие
+	return false 
 end
 
 local function updateESP()
@@ -329,13 +329,18 @@ local function updateESP()
 	for _, v in pairs(Players:GetPlayers()) do
 		if v ~= player then
 			local char = v.Character
-			local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			-- Гибкий поиск: не полагаемся только на стандартные названия
+			local humanoid = char and char:FindFirstChildWhichIsA("Humanoid")
+			local primaryPart = char and (char.PrimaryPart or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildWhichIsA("BasePart"))
 			
-			if char and hrp and humanoid and humanoid.Health > 0 then
+			local isAlive = true
+			if humanoid then 
+				isAlive = humanoid.Health > 0 
+			end
+			
+			if char and primaryPart and isAlive then
 				local shouldHighlight = false
 				
-				-- Фильтры
 				if espSettings.Mode == "All" then
 					shouldHighlight = true
 				elseif espSettings.Mode == "Enemies" then
@@ -359,15 +364,18 @@ local function updateESP()
 					if not highlight or not highlight:IsDescendantOf(game) then
 						if highlight then highlight:Destroy() end
 						highlight = Instance.new("Highlight")
-						highlight.Name = "FusionESP"
+						highlight.Name = "FusionESP_" .. v.Name
 						highlight.FillTransparency = 0.5
 						highlight.OutlineTransparency = 0.1
 						highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-						highlight.Parent = char
+						
+						-- ОБХОД АНТИЧИТА: привязываем через Adornee из безопасной папки
+						highlight.Adornee = char
+						highlight.Parent = espFolder 
+						
 						espObjects[v] = highlight
 					end
 					
-					-- ЛОГИКА 2-Х ЦВЕТОВ (WALL CHECK)
 					local activeColor = espSettings.Color
 					
 					if espSettings.WallCheck then
@@ -379,7 +387,8 @@ local function updateESP()
 					highlight.FillColor = activeColor
 					highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
 					
-					if highlight.Parent ~= char then highlight.Parent = char end
+					-- Защита на случай, если игра регенерировала персонажа
+					if highlight.Adornee ~= char then highlight.Adornee = char end
 				else
 					if espObjects[v] then
 						espObjects[v]:Destroy()
@@ -396,7 +405,6 @@ local function updateESP()
 	end
 end
 
--- Включение/выключение
 espBtn.Activated:Connect(function()
 	espSettings.Enabled = not espSettings.Enabled
 	
