@@ -31,13 +31,12 @@ local aimSettings = {
 	ShowFOV = false,
 	FOVRadius = 150,
 	WallCheck = true,
-	-- НОВЫЕ НАСТРОЙКИ
-	Bind = Enum.UserInputType.MouseButton2, -- По умолчанию ПКМ
-	Mode = "Hold" -- Hold или Toggle
+	Bind = Enum.UserInputType.MouseButton2,
+	Mode = "Hold"
 }
 
-local isAiming = false -- Фактическое состояние наведения
-local waitBind = false -- Состояние ожидания ввода бинда
+local isAiming = false
+local waitBind = false
 
 -- ==========================================
 -- 2. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
@@ -142,7 +141,6 @@ end)
 -- ==========================================
 -- 6. МЕНЮ НАСТРОЕК AIMBOT
 -- ==========================================
--- Увеличена высота меню до 420 для вмещения новых настроек
 local settingsAPI = _G.FusionHub.CreateAddonSettings("Aimbot Settings", 250, 420)
 local aimMenu = settingsAPI.Window
 local toggleAimMenu = settingsAPI.ToggleFunction
@@ -167,7 +165,6 @@ local function createSettingsBtn(text, posY, callback)
 	return btn
 end
 
--- [НОВОЕ] Настройка биндов
 local bindBtn = createSettingsBtn("Bind: " .. aimSettings.Bind.Name, 45, function(btn)
 	waitBind = true
 	btn.Text = "Press any key/mouse..."
@@ -283,7 +280,6 @@ createSettingsBtn("Show FOV: OFF", 325, function(btn)
 	end
 end)
 
--- Настройка размера FOV через TextBox
 local fovFrame = Instance.new("Frame")
 fovFrame.Size = UDim2.new(1, -20, 0, 35)
 fovFrame.Position = UDim2.new(0, 10, 0, 365)
@@ -338,7 +334,6 @@ local function handleInputMatch(input)
 end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	-- Логика назначения новой клавиши/кнопки
 	if waitBind then
 		if input.UserInputType == Enum.UserInputType.Keyboard then
 			aimSettings.Bind = input.KeyCode
@@ -376,7 +371,7 @@ end)
 -- ==========================================
 -- 8. ДИНАМИЧЕСКОЕ ЯДРО АИМБОТА И ФУНКЦИЯ ПРОВЕРКИ СТЕН
 -- ==========================================
-local function isVisible(targetPart, currentCamera)
+local function isVisible(targetPart, targetChar, currentCamera)
 	if not aimSettings.WallCheck then return true end
 	
 	local localChar = player.Character
@@ -392,8 +387,9 @@ local function isVisible(targetPart, currentCamera)
 
 	local rayResult = Workspace:Raycast(rayOrigin, rayDirection, rayParams)
 	
+	-- ОБНОВЛЕНО: Проверяем принадлежность ко всему персонажу (targetChar), а не только к Parent
 	if rayResult then
-		if rayResult.Instance:IsDescendantOf(targetPart.Parent) then
+		if rayResult.Instance:IsDescendantOf(targetChar) then
 			return true
 		end
 		return false
@@ -403,11 +399,15 @@ local function isVisible(targetPart, currentCamera)
 end
 
 local function getTargetPart(char)
+	local part = nil
 	if aimSettings.AimPart == "Head" then
-		return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
+		part = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
 	else
-		return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char.PrimaryPart
+		part = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char.PrimaryPart
 	end
+	
+	-- ОБНОВЛЕНО: Если стандартные части не найдены (игра их прячет), цепляемся за любую базовую часть
+	return part or char:FindFirstChildWhichIsA("BasePart")
 end
 
 local function getClosestPlayer()
@@ -424,18 +424,28 @@ local function getClosestPlayer()
 			if aimSettings.TargetTeam ~= "All" and (not v.Team or v.Team.Name ~= aimSettings.TargetTeam) then continue end
 			
 			local char = v.Character
-			if char and char:FindFirstChildOfClass("Humanoid") and char:FindFirstChildOfClass("Humanoid").Health > 0 then
-				local targetPart = getTargetPart(char)
+			-- ОБНОВЛЕНО: Гибкая проверка здоровья, не ломается при отсутствии Humanoid
+			if char then
+				local humanoid = char:FindFirstChildWhichIsA("Humanoid")
+				local isAlive = true
+				if humanoid then 
+					isAlive = humanoid.Health > 0 
+				end
 				
-				if targetPart then
-					local vector, onScreen = currentCamera:WorldToViewportPoint(targetPart.Position)
+				if isAlive then
+					local targetPart = getTargetPart(char)
 					
-					if onScreen and isVisible(targetPart, currentCamera) then
-						local distance = (Vector2.new(mouseLocation.X, mouseLocation.Y) - Vector2.new(vector.X, vector.Y)).Magnitude
+					if targetPart then
+						local vector, onScreen = currentCamera:WorldToViewportPoint(targetPart.Position)
 						
-						if distance < shortestDistance then
-							closestPlayer = char
-							shortestDistance = distance
+						-- Передаем targetChar для правильной работы WallCheck
+						if onScreen and isVisible(targetPart, char, currentCamera) then
+							local distance = (Vector2.new(mouseLocation.X, mouseLocation.Y) - Vector2.new(vector.X, vector.Y)).Magnitude
+							
+							if distance < shortestDistance then
+								closestPlayer = char
+								shortestDistance = distance
+							end
 						end
 					end
 				end
@@ -457,8 +467,6 @@ aimBtn.Activated:Connect(function()
 		aimLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
 		aimBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
 		
-		-- [ФИКС ОРУЖИЯ] Используем BindToRenderStep с приоритетом ВЫШЕ, чем у камеры Роблокса
-		-- Это гарантирует, что Aimbot перекроет отдачу и скрипты оружия, обновляющие камеру
 		RunService:BindToRenderStep("FusionHubAimbotPriority", Enum.RenderPriority.Camera.Value + 200, function()
 			if isAiming then
 				local targetChar = getClosestPlayer()
@@ -479,7 +487,6 @@ aimBtn.Activated:Connect(function()
 		aimBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 		isAiming = false
 		
-		-- Очищаем цикл
 		pcall(function() RunService:UnbindFromRenderStep("FusionHubAimbotPriority") end)
 	end
 end)
