@@ -5,12 +5,14 @@ local TService = game:GetService("TweenService")
 
 local lPlayer = Playrs.LocalPlayer
 
--- 1. Ждем интерфейс
+-- ==========================================
+-- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- ==========================================
 local pGui = lPlayer:WaitForChild("PlayerGui")
 local fGui = pGui:WaitForChild("FusionHubGui", 10)
 
 if not fGui then
-	warn("FusionHub не найден!")
+	warn("FusionHub не найден! Запустите ядро.")
 	return
 end
 
@@ -22,16 +24,18 @@ if type(_G.FusionHub) ~= "table" or type(_G.FusionHub.CreateAddonSettings) ~= "f
 	return
 end
 
--- 2. Настройки
+-- ==========================================
+-- 2. НАСТРОЙКИ АДДОНА
+-- ==========================================
 local blSet = {
 	Active = false,
 	Bind = Enum.KeyCode.Z,
 	Mode = "Hold" 
 }
 
-local cloneGhost = nil
-
--- 3. Контейнер
+-- ==========================================
+-- 3. ИНТЕРФЕЙС КНОПОК
+-- ==========================================
 local bRow = Instance.new("Frame")
 bRow.Name = "BlinkRow"
 bRow.Size = UDim2.new(1, -15, 0, 45)
@@ -39,7 +43,6 @@ bRow.BackgroundTransparency = 1
 bRow.LayoutOrder = 8
 bRow.Parent = sFrame
 
--- 4. Кнопка
 local bBtn = Instance.new("TextButton")
 bBtn.Name = "BlinkToggle"
 bBtn.Size = UDim2.new(1, -55, 1, 0)
@@ -66,7 +69,6 @@ bLabel.TextSize = 14
 bLabel.TextXAlignment = Enum.TextXAlignment.Left
 bLabel.Parent = bBtn
 
--- 5. Шестеренка
 local setBtn = Instance.new("ImageButton")
 setBtn.Name = "BlinkSettings"
 setBtn.Size = UDim2.new(0, 45, 0, 45)
@@ -89,7 +91,9 @@ sIcon.BackgroundTransparency = 1
 sIcon.Image = "rbxassetid://9405931578"
 sIcon.Parent = setBtn
 
--- 6. Меню Настроек
+-- ==========================================
+-- 4. МЕНЮ НАСТРОЕК
+-- ==========================================
 local bAPI = _G.FusionHub.CreateAddonSettings("Blink Settings", 250, 180)
 local bMenu = bAPI.Window
 
@@ -157,7 +161,14 @@ mBtn.Activated:Connect(function()
 	mBtn.Text = "Mode: " .. blSet.Mode
 end)
 
--- 7. Логика
+-- ==========================================
+-- 5. ЛОГИКА УНИВЕРСАЛЬНОГО БЛИНКА (КЛОНИРОВАНИЕ)
+-- ==========================================
+local realChar = nil
+local fakeChar = nil
+local ghostChar = nil
+local propCache = {}
+
 local function switchBlink(st)
 	if blSet.Active == st then return end
 	blSet.Active = st
@@ -168,26 +179,50 @@ local function switchBlink(st)
 		bBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
 		bBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))
 		
-		pcall(function()
-			settings():GetService("NetworkSettings").IncomingReplicationLag = 99999
-		end)
+		realChar = lPlayer.Character
+		if not realChar or not realChar:FindFirstChild("HumanoidRootPart") then 
+			blSet.Active = false
+			return 
+		end
 		
-		local char = lPlayer.Character
-		if char then
-			char.Archivable = true
-			cloneGhost = char:Clone()
-			
-			for _, v in pairs(cloneGhost:GetDescendants()) do
-				if v:IsA("BasePart") then
-					v.Material = Enum.Material.ForceField
-					v.Color = Color3.fromRGB(150, 255, 150)
-					v.CanCollide = false
-					v.Anchored = true
-				elseif v:IsA("Script") or v:IsA("LocalScript") then
-					v:Destroy()
-				end
+		realChar.Archivable = true
+		
+		-- 1. Создаем Призрака (зеленый маркер, который видят остальные)
+		ghostChar = realChar:Clone()
+		for _, v in pairs(ghostChar:GetDescendants()) do
+			if v:IsA("BasePart") then
+				v.Material = Enum.Material.ForceField
+				v.Color = Color3.fromRGB(150, 255, 150)
+				v.Anchored = true
+				v.CanCollide = false
+			elseif v:IsA("Script") or v:IsA("LocalScript") then
+				v:Destroy()
 			end
-			cloneGhost.Parent = workspace
+		end
+		ghostChar.Parent = workspace
+		
+		-- 2. Создаем Клона для бега (виден только тебе)
+		fakeChar = realChar:Clone()
+		fakeChar.Name = "BlinkClone"
+		fakeChar.Parent = workspace
+		
+		-- Передаем управление клону
+		lPlayer.Character = fakeChar
+		workspace.CurrentCamera.CameraSubject = fakeChar:WaitForChild("Humanoid")
+		
+		-- 3. Прячем и ЯКОРИМ настоящий аватар (сервер видит его замороженным!)
+		propCache = {}
+		for _, v in pairs(realChar:GetDescendants()) do
+			if v:IsA("BasePart") then
+				propCache[v] = {
+					Transparency = v.Transparency,
+					Anchored = v.Anchored,
+					CanCollide = v.CanCollide
+				}
+				v.Transparency = 1
+				v.Anchored = true 
+				v.CanCollide = false
+			end
 		end
 		
 	else
@@ -196,17 +231,33 @@ local function switchBlink(st)
 		bBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 		bBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
 		
-		pcall(function()
-			settings():GetService("NetworkSettings").IncomingReplicationLag = 0
-		end)
-		
-		if cloneGhost then
-			cloneGhost:Destroy()
-			cloneGhost = nil
+		if realChar and fakeChar and realChar:FindFirstChild("HumanoidRootPart") and fakeChar:FindFirstChild("HumanoidRootPart") then
+			-- Телепортируем настоящее тело на позицию клона
+			realChar.HumanoidRootPart.CFrame = fakeChar.HumanoidRootPart.CFrame
+			
+			-- Восстанавливаем внешний вид настоящего тела
+			for part, data in pairs(propCache) do
+				if part and part.Parent then
+					part.Transparency = data.Transparency
+					part.Anchored = data.Anchored
+					part.CanCollide = data.CanCollide
+				end
+			end
+			
+			-- Возвращаем управление оригинальному телу
+			lPlayer.Character = realChar
+			workspace.CurrentCamera.CameraSubject = realChar:WaitForChild("Humanoid")
 		end
+		
+		-- Убираем мусор
+		if ghostChar then ghostChar:Destroy() ghostChar = nil end
+		if fakeChar then fakeChar:Destroy() fakeChar = nil end
 	end
 end
 
+-- ==========================================
+-- 6. ОБРАБОТЧИКИ НАЖАТИЙ
+-- ==========================================
 bBtn.Activated:Connect(function()
 	switchBlink(not blSet.Active)
 end)
@@ -231,7 +282,11 @@ UService.InputEnded:Connect(function(inp, proc)
 	end
 end)
 
-lPlayer.CharacterAdded:Connect(function()
+-- Умная защита от багов при спавне (игнорирует подмену персонажа на клона)
+lPlayer.CharacterAdded:Connect(function(newChar)
+	if fakeChar and newChar == fakeChar then return end
+	if realChar and newChar == realChar then return end
+	
 	if blSet.Active then
 		switchBlink(false)
 	end
