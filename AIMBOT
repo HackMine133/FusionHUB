@@ -198,7 +198,7 @@ local smoothModes = {
 	{name = "Fast", value = 0.5},
 	{name = "Smooth", value = 0.15}
 }
-local smoothIndex = 2
+local smoothIndex = 1
 
 createSettingsBtn("Speed: " .. smoothModes[smoothIndex].name, 165, function(btn)
 	smoothIndex = smoothIndex + 1
