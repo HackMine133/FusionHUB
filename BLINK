@@ -162,16 +162,19 @@ mBtn.Activated:Connect(function()
 end)
 
 -- ==========================================
--- 5. ЛОГИКА УНИВЕРСАЛЬНОГО БЛИНКА (КЛОНИРОВАНИЕ)
+-- 5. ЛОГИКА ИДЕАЛЬНОГО БЛИНКА (SOFT CLONE)
 -- ==========================================
 local realChar = nil
 local fakeChar = nil
 local ghostChar = nil
 local propCache = {}
+local fpConnection = nil
 
 local function switchBlink(st)
 	if blSet.Active == st then return end
 	blSet.Active = st
+	
+	local cam = workspace.CurrentCamera
 	
 	if blSet.Active then
 		bLabel.Text = "Blink: ON"
@@ -187,8 +190,9 @@ local function switchBlink(st)
 		
 		realChar.Archivable = true
 		
-		-- 1. Создаем Призрака (зеленый маркер, который видят остальные)
+		-- 1. Создаем Призрака для сервера
 		ghostChar = realChar:Clone()
+		ghostChar.Name = "BlinkGhost"
 		for _, v in pairs(ghostChar:GetDescendants()) do
 			if v:IsA("BasePart") then
 				v.Material = Enum.Material.ForceField
@@ -201,29 +205,58 @@ local function switchBlink(st)
 		end
 		ghostChar.Parent = workspace
 		
-		-- 2. Создаем Клона для бега (виден только тебе)
-		fakeChar = realChar:Clone()
-		fakeChar.Name = "BlinkClone"
-		fakeChar.Parent = workspace
-		
-		-- Передаем управление клону
-		lPlayer.Character = fakeChar
-		workspace.CurrentCamera.CameraSubject = fakeChar:WaitForChild("Humanoid")
-		
-		-- 3. Прячем и ЯКОРИМ настоящий аватар (сервер видит его замороженным!)
+		-- 2. Замораживаем и прячем настоящее тело (оно перестает слать пакеты серверу)
 		propCache = {}
 		for _, v in pairs(realChar:GetDescendants()) do
 			if v:IsA("BasePart") then
-				propCache[v] = {
-					Transparency = v.Transparency,
-					Anchored = v.Anchored,
-					CanCollide = v.CanCollide
-				}
+				propCache[v] = {Transparency = v.Transparency, Anchored = v.Anchored, CanCollide = v.CanCollide}
 				v.Transparency = 1
 				v.Anchored = true 
 				v.CanCollide = false
 			end
 		end
+		
+		-- 3. Создаем Клона для плавного бега
+		fakeChar = realChar:Clone()
+		fakeChar.Name = lPlayer.Name
+		
+		-- Сохраняем текущую камеру, чтобы не было дерганий
+		local oldCFrame = cam.CFrame
+		local oldFocus = cam.Focus
+		
+		-- Важный трюк: сначала задаем Character, а потом кидаем в Workspace
+		-- Это заставит скрипты анимаций и управления включиться без багов!
+		lPlayer.Character = fakeChar
+		fakeChar.Parent = workspace
+		
+		-- Возвращаем камеру обратно
+		cam.CameraSubject = fakeChar:WaitForChild("Humanoid")
+		cam.CFrame = oldCFrame
+		cam.Focus = oldFocus
+		
+		-- 4. Фикс для вида от первого лица (чтобы не было видно головы клона)
+		fpConnection = RService.RenderStepped:Connect(function()
+			if fakeChar and fakeChar:FindFirstChild("Head") then
+				local dist = (cam.CFrame.Position - fakeChar.Head.Position).Magnitude
+				local isFirstPerson = dist < 1.5
+				
+				for _, part in ipairs(fakeChar:GetDescendants()) do
+					if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+						if isFirstPerson then
+							if part.LocalTransparencyModifier < 1 then
+								part:SetAttribute("OldMod", part.LocalTransparencyModifier)
+								part.LocalTransparencyModifier = 1
+							end
+						else
+							if part:GetAttribute("OldMod") then
+								part.LocalTransparencyModifier = part:GetAttribute("OldMod")
+								part:SetAttribute("OldMod", nil)
+							end
+						end
+					end
+				end
+			end
+		end)
 		
 	else
 		bLabel.Text = "Blink: OFF"
@@ -231,11 +264,19 @@ local function switchBlink(st)
 		bBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 		bBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))
 		
+		if fpConnection then 
+			fpConnection:Disconnect() 
+			fpConnection = nil 
+		end
+		
 		if realChar and fakeChar and realChar:FindFirstChild("HumanoidRootPart") and fakeChar:FindFirstChild("HumanoidRootPart") then
-			-- Телепортируем настоящее тело на позицию клона
+			local oldCFrame = cam.CFrame
+			local oldFocus = cam.Focus
+			
+			-- Телепортируем настоящее тело к позиции клона
 			realChar.HumanoidRootPart.CFrame = fakeChar.HumanoidRootPart.CFrame
 			
-			-- Восстанавливаем внешний вид настоящего тела
+			-- Возвращаем свойства (видимость, коллизии)
 			for part, data in pairs(propCache) do
 				if part and part.Parent then
 					part.Transparency = data.Transparency
@@ -244,12 +285,14 @@ local function switchBlink(st)
 				end
 			end
 			
-			-- Возвращаем управление оригинальному телу
+			-- Передаем управление обратно плавно
 			lPlayer.Character = realChar
-			workspace.CurrentCamera.CameraSubject = realChar:WaitForChild("Humanoid")
+			cam.CameraSubject = realChar:WaitForChild("Humanoid")
+			cam.CFrame = oldCFrame
+			cam.Focus = oldFocus
 		end
 		
-		-- Убираем мусор
+		-- Удаляем мусор
 		if ghostChar then ghostChar:Destroy() ghostChar = nil end
 		if fakeChar then fakeChar:Destroy() fakeChar = nil end
 	end
@@ -282,8 +325,8 @@ UService.InputEnded:Connect(function(inp, proc)
 	end
 end)
 
--- Умная защита от багов при спавне (игнорирует подмену персонажа на клона)
 lPlayer.CharacterAdded:Connect(function(newChar)
+	-- Игнорируем авто-отключение, если это просто мы переключаемся на клона
 	if fakeChar and newChar == fakeChar then return end
 	if realChar and newChar == realChar then return end
 	
