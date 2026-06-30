@@ -175,7 +175,7 @@ uiPadding.Parent = aimScroll
 uiPadding.PaddingTop = UDim.new(0, 5)
 uiPadding.PaddingBottom = UDim.new(0, 10)
 
--- Динамическое обновление высоты прокрутки! 
+-- Динамическое обновление высоты прокрутки!
 listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 	aimScroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 20)
 end)
@@ -496,6 +496,21 @@ local function getClosestPlayer()
 		if v ~= player then
 			if aimSettings.TeamCheck and v.Team == player.Team then continue end
 			if aimSettings.TargetTeam ~= "All" and (not v.Team or v.Team.Name ~= aimSettings.TargetTeam) then continue end
+			
+			-- =========================================
+			-- ИНТЕГРАЦИЯ WHITELIST: ИГНОРИРУЕМ ИГРОКОВ В СПИСКЕ
+			-- =========================================
+			if _G.FusionHubWhitelistEnabled and _G.FusionHubWhitelist then
+				local isWhitelisted = false
+				for _, wlName in ipairs(_G.FusionHubWhitelist) do
+					if v.Name == wlName then 
+						isWhitelisted = true 
+						break 
+					end
+				end
+				if isWhitelisted then continue end
+			end
+			-- =========================================
 			
 			local char = v.Character
 			if char then
