@@ -33,13 +33,14 @@ local aimSettings = {
 	WallCheck = true,
 	Bind = Enum.UserInputType.MouseButton2,
 	Mode = "Hold",
-	IgnoreFF = true,  -- Фильтр ForceField
-	AutoShoot = false -- Авто-выстрел (зажатие ЛКМ)
+	IgnoreFF = true,       -- Фильтр ForceField
+	AutoShoot = false,     -- Авто-выстрел
+	AutoShootMode = "Hold" -- Режим авто-выстрела: "Hold" (зажим) или "Spam" (быстрый клик)
 }
 
 local isAiming = false
 local waitBind = false
-local isShooting = false -- Статус для авто-зажатия ЛКМ
+local isShooting = false -- Статус для авто-выстрела
 
 -- ==========================================
 -- 2. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
@@ -151,13 +152,13 @@ local toggleAimMenu = settingsAPI.ToggleFunction
 -- Создаем скролл-зону для настроек, чтобы не зависеть от высоты окна
 local aimScroll = Instance.new("ScrollingFrame")
 aimScroll.Name = "SettingsScroll"
-aimScroll.Size = UDim2.new(1, 0, 1, -40) -- Отступаем сверху для названия окна
+aimScroll.Size = UDim2.new(1, 0, 1, -40) 
 aimScroll.Position = UDim2.new(0, 0, 0, 40)
 aimScroll.BackgroundTransparency = 1
 aimScroll.BorderSizePixel = 0
 aimScroll.ScrollBarThickness = 4
 aimScroll.ScrollBarImageColor3 = Color3.fromRGB(200, 200, 205)
-aimScroll.CanvasSize = UDim2.new(0, 0, 0, 450) -- Размер холста, чтобы все влезло
+aimScroll.CanvasSize = UDim2.new(0, 0, 0, 500) -- Увеличил размер холста до 500
 aimScroll.Parent = aimMenu
 
 local function createSettingsBtn(text, posY, callback)
@@ -170,7 +171,7 @@ local function createSettingsBtn(text, posY, callback)
 	btn.TextColor3 = Color3.fromRGB(200, 200, 205)
 	btn.TextSize = 13
 	btn.Active = true
-	btn.Parent = aimScroll -- Теперь кидаем в пролистывалку!
+	btn.Parent = aimScroll 
 	
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 6)
@@ -180,7 +181,6 @@ local function createSettingsBtn(text, posY, callback)
 	return btn
 end
 
--- Изменил координаты posY (сдвинул вверх, т.к. ScrollingFrame начинается под шапкой)
 local bindBtn = createSettingsBtn("Bind: " .. aimSettings.Bind.Name, 5, function(btn)
 	waitBind = true
 	btn.Text = "Press any key/mouse..."
@@ -336,7 +336,7 @@ fovInput.FocusLost:Connect(function()
 	fovCircle.Size = UDim2.new(0, aimSettings.FOVRadius * 2, 0, aimSettings.FOVRadius * 2)
 end)
 
--- НОВАЯ КНОПКА: Игнор FF (ForceField)
+-- Игнор FF (ForceField)
 local ignoreFFBtn = createSettingsBtn("Ignore FF: ON", 365, function(btn)
 	aimSettings.IgnoreFF = not aimSettings.IgnoreFF
 	if aimSettings.IgnoreFF then
@@ -349,7 +349,7 @@ local ignoreFFBtn = createSettingsBtn("Ignore FF: ON", 365, function(btn)
 end)
 ignoreFFBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
 
--- НОВАЯ КНОПКА: Авто-зажатие ЛКМ
+-- Авто-выстрел (ВКЛ/ВЫКЛ)
 local autoShootBtn = createSettingsBtn("Auto-Shoot: OFF", 405, function(btn)
 	aimSettings.AutoShoot = not aimSettings.AutoShoot
 	if aimSettings.AutoShoot then
@@ -357,6 +357,19 @@ local autoShootBtn = createSettingsBtn("Auto-Shoot: OFF", 405, function(btn)
 		btn.TextColor3 = Color3.fromRGB(150, 255, 150)
 	else
 		btn.Text = "Auto-Shoot: OFF"
+		btn.TextColor3 = Color3.fromRGB(200, 200, 205)
+	end
+end)
+
+-- НОВАЯ КНОПКА: Режим Авто-выстрела (Зажим / Спам)
+local autoShootModeBtn = createSettingsBtn("Shoot Mode: Hold", 445, function(btn)
+	if aimSettings.AutoShootMode == "Hold" then
+		aimSettings.AutoShootMode = "Spam"
+		btn.Text = "Shoot Mode: Spam"
+		btn.TextColor3 = Color3.fromRGB(255, 150, 150) -- Красный цвет для спама
+	else
+		aimSettings.AutoShootMode = "Hold"
+		btn.Text = "Shoot Mode: Hold"
 		btn.TextColor3 = Color3.fromRGB(200, 200, 205)
 	end
 end)
@@ -524,15 +537,31 @@ aimBtn.Activated:Connect(function()
 							end
 						end
 						
-						-- Логика Авто-зажатия ЛКМ
+						-- Логика Авто-выстрела (Hold или Spam)
 						if aimSettings.AutoShoot then
-							if not isShooting and mouse1press then
-								mouse1press()
+							if aimSettings.AutoShootMode == "Hold" then
+								-- Режим зажатия
+								if not isShooting and mouse1press then
+									mouse1press()
+									isShooting = true
+								end
+							elseif aimSettings.AutoShootMode == "Spam" then
+								-- Режим спама (клики каждый кадр)
+								if mouse1click then
+									mouse1click()
+								elseif mouse1press and mouse1release then
+									mouse1press()
+									-- Вызываем release микро-задержкой, чтобы Роблокс 100% его зарегистрировал
+									task.spawn(function()
+										task.wait()
+										mouse1release()
+									end)
+								end
 								isShooting = true
 							end
 						end
 					else
-						-- Если цель пропала/умерла, отпускаем ЛКМ
+						-- Если цель пропала/умерла, отпускаем ЛКМ (сброс)
 						if isShooting and mouse1release then
 							mouse1release()
 							isShooting = false
