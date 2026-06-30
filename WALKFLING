@@ -27,7 +27,7 @@ flingBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 flingBtn.BackgroundTransparency = 0.4
 flingBtn.Text = ""
 flingBtn.AutoButtonColor = true
-flingBtn.LayoutOrder = 7 -- Встает после Fly (у которого 6)
+flingBtn.LayoutOrder = 7 -- Встает после Fly
 flingBtn.Parent = scrollFrame
 
 local flingCorner = Instance.new("UICorner")
@@ -46,7 +46,7 @@ flingLabel.TextXAlignment = Enum.TextXAlignment.Left
 flingLabel.Parent = flingBtn
 
 -- ==========================================
--- 3. ЛОГИКА WALKFLING
+-- 3. ЛОГИКА WALKFLING С ВАЙТЛИСТОМ
 -- ==========================================
 local isFlingEnabled = false
 
@@ -60,8 +60,8 @@ local function toggleFling()
 	if isFlingEnabled then
 		-- Визуальное включение
 		flingLabel.Text = "WalkFling: ON"
-		flingLabel.TextColor3 = Color3.fromRGB(150, 255, 150) -- Зеленый текст
-		flingBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35) -- Зеленоватый фон
+		flingLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+		flingBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
 		
 		-- Запуск встроенного Noclip, чтобы не улетать от столкновений
 		task.spawn(function()
@@ -87,6 +87,28 @@ local function toggleFling()
 				local root = getRoot(character)
 				
 				if character and character.Parent and root and root.Parent then
+					
+					-- =========================================
+					-- ИНТЕГРАЦИЯ WHITELIST: SAFE ZONE (12 стадов)
+					-- =========================================
+					local isNearFriend = false
+					if _G.FusionHubWhitelistEnabled and type(_G.FusionHubWhitelist) == "table" then
+						for _, wlName in ipairs(_G.FusionHubWhitelist) do
+							local friend = Players:FindFirstChild(wlName)
+							if friend and friend.Character then
+								local friendRoot = getRoot(friend.Character)
+								if friendRoot and (root.Position - friendRoot.Position).Magnitude < 12 then
+									isNearFriend = true
+									break
+								end
+							end
+						end
+					end
+					
+					-- Если друг слишком близко, пропускаем разрушительный импульс в этом кадре
+					if isNearFriend then continue end
+					-- =========================================
+
 					local vel = root.Velocity
 					
 					-- Резкий импульс для флинга
@@ -110,8 +132,6 @@ local function toggleFling()
 		flingLabel.Text = "WalkFling: OFF"
 		flingLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
 		flingBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-		
-		-- Циклы остановятся сами благодаря проверке isFlingEnabled в while
 	end
 end
 
@@ -120,7 +140,6 @@ flingBtn.Activated:Connect(toggleFling)
 
 -- Защита при перерождении персонажа
 player.CharacterAdded:Connect(function()
-	-- Выключаем системно и визуально, если игрок умер с включенным флингом
 	if isFlingEnabled then
 		toggleFling() 
 	end
