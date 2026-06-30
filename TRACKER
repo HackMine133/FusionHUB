@@ -97,7 +97,6 @@ sIcon.Parent = setBtn
 -- ==========================================
 -- 4. МЕНЮ НАСТРОЕК
 -- ==========================================
--- Увеличил высоту меню до 220, чтобы вместить новую кнопку
 local tAPI = _G.FusionHub.CreateAddonSettings("Tracker Settings", 250, 220)
 local tMenu = tAPI.Window
 
@@ -180,23 +179,26 @@ end)
 -- ==========================================
 -- 5. ВИЗУАЛЬНЫЕ ЭЛЕМЕНТЫ ТРЕКЕРА
 -- ==========================================
--- Контейнер для стрелок
+-- ИСПРАВЛЕНИЕ КАМЕРЫ №1: Выключаем перехват мыши у UI контейнеров
 local arrowContainer = Instance.new("Frame")
 arrowContainer.Name = "TrackerArrowsContainer"
 arrowContainer.Size = UDim2.new(1, 0, 1, 0)
 arrowContainer.BackgroundTransparency = 1
+arrowContainer.Active = false
+pcall(function() arrowContainer.Interactable = false end)
 arrowContainer.Parent = fGui
 
--- Текст-предупреждение на экране
 local screenAlert = Instance.new("TextLabel")
 screenAlert.Size = UDim2.new(1, 0, 0, 50)
-screenAlert.Position = UDim2.new(0, 0, 0.7, 0) -- Чуть ниже центра экрана
+screenAlert.Position = UDim2.new(0, 0, 0.7, 0)
 screenAlert.BackgroundTransparency = 1
 screenAlert.Text = ""
 screenAlert.Font = Enum.Font.GothamBlack
 screenAlert.TextColor3 = Color3.fromRGB(255, 50, 50)
 screenAlert.TextSize = 24
 screenAlert.Visible = false
+screenAlert.Active = false
+pcall(function() screenAlert.Interactable = false end)
 screenAlert.Parent = fGui
 
 local alertStroke = Instance.new("UIStroke")
@@ -204,14 +206,22 @@ alertStroke.Color = Color3.fromRGB(0, 0, 0)
 alertStroke.Thickness = 2
 alertStroke.Parent = screenAlert
 
--- Невидимая точка у нашей камеры, откуда будет исходить лазер
+-- ИСПРАВЛЕНИЕ КАМЕРЫ №2: Делаем точку лазера физически и луче-неосязаемой
 local originPart = Instance.new("Part")
 originPart.Size = Vector3.new(0.1, 0.1, 0.1)
 originPart.Transparency = 1
 originPart.CanCollide = false
+originPart.CanQuery = false -- ВАЖНО: Мышь и камера теперь не "сталкиваются" с ней
+originPart.CanTouch = false
+originPart.Massless = true
 originPart.Anchored = true
 originPart.Name = "TrackerCameraOrigin"
-originPart.Parent = workspace
+-- Прячем партику в саму камеру (гарантированный способ обойти баги камеры)
+if workspace.CurrentCamera then
+	originPart.Parent = workspace.CurrentCamera
+else
+	originPart.Parent = workspace
+end
 
 local originAtt = Instance.new("Attachment")
 originAtt.Parent = originPart
@@ -223,7 +233,7 @@ local function clearPlayerTracker(p)
 		if activeTrackers[p].Beam then activeTrackers[p].Beam:Destroy() end
 		if activeTrackers[p].Att then activeTrackers[p].Att:Destroy() end
 		if activeTrackers[p].Hl then activeTrackers[p].Hl:Destroy() end
-		if activeTrackers[p].Arrow then activeTrackers[p].Arrow:Destroy() end -- Удаляем стрелку при очистке
+		if activeTrackers[p].Arrow then activeTrackers[p].Arrow:Destroy() end 
 		activeTrackers[p] = nil
 	end
 end
@@ -239,9 +249,16 @@ local function toggleTracker(state)
 		trkBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))
 		
 		trkConnection = tRunSvc.RenderStepped:Connect(function()
-			-- Обновляем позицию начала лазера (чуть ниже камеры, чтобы не перекрывать прицел)
-			originPart.CFrame = workspace.CurrentCamera.CFrame * CFrame.new(0, -0.8, 0)
 			local cam = workspace.CurrentCamera
+			if not cam then return end
+			
+			-- Защита от удаления камеры игрой при перерождении
+			if originPart.Parent ~= cam then
+				originPart.Parent = cam
+			end
+			
+			-- Обновляем позицию начала лазера
+			originPart.CFrame = cam.CFrame * CFrame.new(0, -0.8, 0)
 			
 			local lookers = {}
 			local myChar = lClient.Character
@@ -260,7 +277,7 @@ local function toggleTracker(state)
 								isEnemy = false
 							end
 							
-							-- ИНТЕГРАЦИЯ ВАЙТЛИСТА (Если включен)
+							-- ИНТЕГРАЦИЯ ВАЙТЛИСТА
 							if _G.FusionHubWhitelistEnabled and _G.FusionHubWhitelist then
 								for _, wlName in ipairs(_G.FusionHubWhitelist) do
 									if p.Name == wlName then isEnemy = false break end
@@ -270,7 +287,6 @@ local function toggleTracker(state)
 							if isEnemy then
 								-- Математика: вычисляем, смотрит ли вектор головы врага в нашу сторону
 								local dirToMe = (myHead.Position - pChar.Head.Position).Unit
-								-- Используем HumanoidRootPart для большей стабильности
 								local enemyRoot = pChar:FindFirstChild("HumanoidRootPart")
 								local aimPart = enemyRoot or pChar.Head
 								
@@ -326,8 +342,10 @@ local function toggleTracker(state)
 								arrow.Size = UDim2.new(0, 35, 0, 35)
 								arrow.AnchorPoint = Vector2.new(0.5, 0.5)
 								arrow.BackgroundTransparency = 1
-								arrow.Image = "rbxassetid://3594042296" -- ID красивого белого треугольника
+								arrow.Image = "rbxassetid://3594042296"
 								arrow.ImageColor3 = Color3.fromRGB(255, 40, 40)
+								arrow.Active = false 
+								pcall(function() arrow.Interactable = false end)
 								arrow.Parent = arrowContainer
 								
 								local aStroke = Instance.new("UIStroke")
@@ -354,26 +372,23 @@ local function toggleTracker(state)
 								local vec, onScreen = cam:WorldToViewportPoint(tPos)
 								local center = cam.ViewportSize / 2
 								
-								-- Смещения от центра экрана
 								local dx = vec.X - center.X
 								local dy = vec.Y - center.Y
 								
-								-- Если враг за камерой (Z < 0), инвертируем координаты, чтобы стрелка указывала назад
 								if vec.Z < 0 then
 									dx = -dx
 									dy = -dy
 								end
 								
-								-- Математика угла (в радианах)
 								local angle = math.atan2(dy, dx)
-								local radius = 220 -- Радиус отдаления стрелки от центра прицела
+								local radius = 220 
 								
 								activeTrackers[p].Arrow.Position = UDim2.new(0.5, math.cos(angle) * radius, 0.5, math.sin(angle) * radius)
-								
-								-- Треугольник изначально смотрит ВВЕРХ, а atan2(0) это ВПРАВО, поэтому прибавляем 90 градусов
 								activeTrackers[p].Arrow.Rotation = math.deg(angle) + 90
 							else
-								activeTrackers[p].Arrow.Visible = false
+								if activeTrackers[p].Arrow then
+									activeTrackers[p].Arrow.Visible = false
+								end
 							end
 						else
 							clearPlayerTracker(p)
