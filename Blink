@@ -1,0 +1,266 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+
+-- ==========================================
+-- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- ==========================================
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+if not _G.FusionHub or type(_G.FusionHub.CreateAddonSettings) ~= "function" then
+	warn("Ошибка: API FusionHub не найдено! Убедитесь, что используете Ultimate Version ядра.")
+	return
+end
+
+-- ==========================================
+-- 2. СОСТОЯНИЕ АДДОНА И НАСТРОЙКИ
+-- ==========================================
+local blinkSettings = {
+	Enabled = false,
+	Keybind = Enum.KeyCode.Z,
+	Mode = "Hold" -- "Hold" или "Toggle"
+}
+
+local ghostClone = nil
+
+-- ==========================================
+-- 3. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
+-- ==========================================
+local blinkRow = Instance.new("Frame")
+blinkRow.Name = "BlinkRow"
+blinkRow.Size = UDim2.new(1, -15, 0, 45)[cite: 6, 7]
+blinkRow.BackgroundTransparency = 1[cite: 6, 7]
+blinkRow.LayoutOrder = 8 -- Встает после Teleport/Noclip
+blinkRow.Parent = scrollFrame
+
+-- ==========================================
+-- 4. ОСНОВНАЯ КНОПКА BLINK
+-- ==========================================
+local blinkBtn = Instance.new("TextButton")
+blinkBtn.Name = "BlinkToggleButton"
+blinkBtn.Size = UDim2.new(1, -55, 1, 0)[cite: 6]
+blinkBtn.Position = UDim2.new(0, 0, 0, 0)[cite: 6]
+blinkBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)[cite: 6, 7]
+blinkBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))[cite: 6]
+blinkBtn.Text = ""[cite: 6, 7]
+blinkBtn.AutoButtonColor = true[cite: 6, 7]
+blinkBtn.Active = true[cite: 6]
+blinkBtn.Parent = blinkRow
+
+local blinkCorner = Instance.new("UICorner")
+blinkCorner.CornerRadius = UDim.new(0, 8)[cite: 6, 7]
+blinkCorner.Parent = blinkBtn
+
+local blinkLabel = Instance.new("TextLabel")
+blinkLabel.Size = UDim2.new(1, -20, 1, 0)[cite: 6, 7]
+blinkLabel.Position = UDim2.new(0, 10, 0, 0)[cite: 6, 7]
+blinkLabel.BackgroundTransparency = 1[cite: 6, 7]
+blinkLabel.Text = "Blink (Fake Lag): OFF"
+blinkLabel.Font = Enum.Font.GothamMedium[cite: 6, 7]
+blinkLabel.TextColor3 = Color3.fromRGB(240, 240, 245)[cite: 6, 7]
+blinkLabel.TextSize = 14[cite: 6, 7]
+blinkLabel.TextXAlignment = Enum.TextXAlignment.Left[cite: 6, 7]
+blinkLabel.Parent = blinkBtn
+
+-- ==========================================
+-- 5. КНОПКА НАСТРОЕК BLINK (ШЕСТЕРЕНКА)
+-- ==========================================
+local settingsBtn = Instance.new("ImageButton")
+settingsBtn.Name = "BlinkSettingsButton"
+settingsBtn.Size = UDim2.new(0, 45, 0, 45)[cite: 6]
+settingsBtn.Position = UDim2.new(1, -45, 0, 0)[cite: 6]
+settingsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)[cite: 6]
+settingsBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))[cite: 6]
+settingsBtn.AutoButtonColor = true[cite: 6]
+settingsBtn.Active = true[cite: 6]
+settingsBtn.Parent = blinkRow
+
+local settingsCorner = Instance.new("UICorner")
+settingsCorner.CornerRadius = UDim.new(0, 8)[cite: 6]
+settingsCorner.Parent = settingsBtn
+
+local settingsIcon = Instance.new("ImageLabel")
+settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)[cite: 6]
+settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)[cite: 6]
+settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)[cite: 6]
+settingsIcon.BackgroundTransparency = 1[cite: 6]
+settingsIcon.Image = "rbxassetid://9405931578"[cite: 6]
+settingsIcon.Parent = settingsBtn
+
+-- ==========================================
+-- 6. МЕНЮ НАСТРОЕК BLINK
+-- ==========================================
+local settingsAPI = _G.FusionHub.CreateAddonSettings("Blink Settings", 250, 180)[cite: 6]
+local blinkMenu = settingsAPI.Window
+
+settingsBtn.Activated:Connect(settingsAPI.ToggleFunction)
+
+-- Подпись Keybind
+local keybindLabel = Instance.new("TextLabel")
+keybindLabel.Size = UDim2.new(1, -20, 0, 20)
+keybindLabel.Position = UDim2.new(0, 10, 0, 50)
+keybindLabel.BackgroundTransparency = 1
+keybindLabel.Text = "Blink Keybind:"
+keybindLabel.Font = Enum.Font.Gotham
+keybindLabel.TextColor3 = Color3.fromRGB(180, 180, 185)
+keybindLabel.TextSize = 12
+keybindLabel.TextXAlignment = Enum.TextXAlignment.Left
+keybindLabel.Parent = blinkMenu
+
+-- Кнопка установки Keybind
+local keybindBtn = Instance.new("TextButton")
+keybindBtn.Size = UDim2.new(1, -20, 0, 35)
+keybindBtn.Position = UDim2.new(0, 10, 0, 75)
+keybindBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+keybindBtn:SetAttribute("OriginalColor", Color3.fromRGB(15, 15, 20))
+keybindBtn.Text = blinkSettings.Keybind.Name
+keybindBtn.Font = Enum.Font.GothamBold
+keybindBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
+keybindBtn.TextSize = 13
+keybindBtn.Parent = blinkMenu
+Instance.new("UICorner", keybindBtn).CornerRadius = UDim.new(0, 6)
+Instance.new("UIStroke", keybindBtn).Color = Color3.fromRGB(80, 80, 90)
+
+-- Кнопка режима (Toggle / Hold)
+local modeBtn = Instance.new("TextButton")
+modeBtn.Size = UDim2.new(1, -20, 0, 35)
+modeBtn.Position = UDim2.new(0, 10, 0, 125)
+modeBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+modeBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 35, 40))
+modeBtn.Text = "Mode: " .. blinkSettings.Mode
+modeBtn.Font = Enum.Font.GothamBold
+modeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+modeBtn.TextSize = 12
+modeBtn.Parent = blinkMenu
+Instance.new("UICorner", modeBtn).CornerRadius = UDim.new(0, 6)
+
+local isBinding = false
+keybindBtn.Activated:Connect(function()
+	isBinding = true
+	keybindBtn.Text = "Press any key..."
+	keybindBtn.TextColor3 = Color3.fromRGB(255, 200, 100)
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	-- Настройка бинда
+	if isBinding and input.UserInputType == Enum.UserInputType.Keyboard then
+		blinkSettings.Keybind = input.KeyCode
+		keybindBtn.Text = input.KeyCode.Name
+		keybindBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
+		isBinding = false
+		return
+	end
+end)
+
+modeBtn.Activated:Connect(function()
+	if blinkSettings.Mode == "Hold" then
+		blinkSettings.Mode = "Toggle"
+	else
+		blinkSettings.Mode = "Hold"
+	end
+	modeBtn.Text = "Mode: " .. blinkSettings.Mode
+end)
+
+-- ==========================================
+-- 7. ЛОГИКА BLINK
+-- ==========================================
+local function setBlinkState(state)
+	if blinkSettings.Enabled == state then return end
+	blinkSettings.Enabled = state
+	
+	if blinkSettings.Enabled then
+		-- Визуальное включение
+		blinkLabel.Text = "Blink: ON"
+		blinkLabel.TextColor3 = Color3.fromRGB(150, 255, 150)[cite: 6, 7]
+		blinkBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)[cite: 6, 7]
+		blinkBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))[cite: 6]
+		
+		-- Заморозка пакетов (на сервер не уходят координаты)
+		pcall(function()
+			settings():GetService("NetworkSettings").IncomingReplicationLag = 99999
+		end)
+		
+		-- Создание визуального "призрака", чтобы понимать, где мы остались для сервера
+		local char = player.Character
+		if char then
+			char.Archivable = true
+			ghostClone = char:Clone()
+			
+			for _, v in pairs(ghostClone:GetDescendants()) do
+				if v:IsA("BasePart") then
+					v.Material = Enum.Material.ForceField -- Неоновый прозрачный материал
+					v.Color = Color3.fromRGB(150, 255, 150) -- Зеленый цвет призрака
+					v.CanCollide = false
+					v.Anchored = true
+				elseif v:IsA("Script") or v:IsA("LocalScript") then
+					v:Destroy() -- Удаляем скрипты из клона, чтобы не было багов
+				end
+			end
+			
+			ghostClone.Parent = workspace
+		end
+		
+	else
+		-- Визуальное выключение
+		blinkLabel.Text = "Blink: OFF"
+		blinkLabel.TextColor3 = Color3.fromRGB(240, 240, 245)[cite: 6, 7]
+		blinkBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)[cite: 6, 7]
+		blinkBtn:SetAttribute("OriginalColor", Color3.fromRGB(30, 30, 35))[cite: 6]
+		
+		-- Восстановление пакетов (моментальный телепорт)
+		pcall(function()
+			settings():GetService("NetworkSettings").IncomingReplicationLag = 0
+		end)
+		
+		-- Удаление призрака
+		if ghostClone then
+			ghostClone:Destroy()
+			ghostClone = nil
+		end
+	end
+end
+
+-- Обработка нажатия на саму кнопку (работает как Toggle всегда)
+blinkBtn.Activated:Connect(function()
+	setBlinkState(not blinkSettings.Enabled)
+end)
+
+-- Обработка горячих клавиш (Keybind)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed or isBinding then return end
+	
+	if input.KeyCode == blinkSettings.Keybind then
+		if blinkSettings.Mode == "Toggle" then
+			setBlinkState(not blinkSettings.Enabled)
+		elseif blinkSettings.Mode == "Hold" then
+			setBlinkState(true)
+		end
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+	if gameProcessed or isBinding then return end
+	
+	if input.KeyCode == blinkSettings.Keybind and blinkSettings.Mode == "Hold" then
+		setBlinkState(false)
+	end
+end)
+
+-- Защита при смерти или респавне
+player.CharacterAdded:Connect(function()
+	if blinkSettings.Enabled then
+		setBlinkState(false)
+	end
+end)
