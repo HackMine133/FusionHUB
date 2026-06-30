@@ -142,12 +142,23 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ==========================================
--- 6. МЕНЮ НАСТРОЕК AIMBOT
+-- 6. МЕНЮ НАСТРОЕК AIMBOT (С ПРОЛИСТЫВАНИЕМ)
 -- ==========================================
--- Увеличена высота окна до 500 для новых кнопок
-local settingsAPI = _G.FusionHub.CreateAddonSettings("Aimbot Settings", 250, 500)
+local settingsAPI = _G.FusionHub.CreateAddonSettings("Aimbot Settings", 250, 420)
 local aimMenu = settingsAPI.Window
 local toggleAimMenu = settingsAPI.ToggleFunction
+
+-- Создаем скролл-зону для настроек, чтобы не зависеть от высоты окна
+local aimScroll = Instance.new("ScrollingFrame")
+aimScroll.Name = "SettingsScroll"
+aimScroll.Size = UDim2.new(1, 0, 1, -40) -- Отступаем сверху для названия окна
+aimScroll.Position = UDim2.new(0, 0, 0, 40)
+aimScroll.BackgroundTransparency = 1
+aimScroll.BorderSizePixel = 0
+aimScroll.ScrollBarThickness = 4
+aimScroll.ScrollBarImageColor3 = Color3.fromRGB(200, 200, 205)
+aimScroll.CanvasSize = UDim2.new(0, 0, 0, 450) -- Размер холста, чтобы все влезло
+aimScroll.Parent = aimMenu
 
 local function createSettingsBtn(text, posY, callback)
 	local btn = Instance.new("TextButton")
@@ -159,7 +170,7 @@ local function createSettingsBtn(text, posY, callback)
 	btn.TextColor3 = Color3.fromRGB(200, 200, 205)
 	btn.TextSize = 13
 	btn.Active = true
-	btn.Parent = aimMenu
+	btn.Parent = aimScroll -- Теперь кидаем в пролистывалку!
 	
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 6)
@@ -169,13 +180,14 @@ local function createSettingsBtn(text, posY, callback)
 	return btn
 end
 
-local bindBtn = createSettingsBtn("Bind: " .. aimSettings.Bind.Name, 45, function(btn)
+-- Изменил координаты posY (сдвинул вверх, т.к. ScrollingFrame начинается под шапкой)
+local bindBtn = createSettingsBtn("Bind: " .. aimSettings.Bind.Name, 5, function(btn)
 	waitBind = true
 	btn.Text = "Press any key/mouse..."
 	btn.TextColor3 = Color3.fromRGB(255, 200, 100)
 end)
 
-local modeBtn = createSettingsBtn("Mode: " .. aimSettings.Mode, 85, function(btn)
+local modeBtn = createSettingsBtn("Mode: " .. aimSettings.Mode, 45, function(btn)
 	if aimSettings.Mode == "Hold" then
 		aimSettings.Mode = "Toggle"
 	else
@@ -184,7 +196,7 @@ local modeBtn = createSettingsBtn("Mode: " .. aimSettings.Mode, 85, function(btn
 	btn.Text = "Mode: " .. aimSettings.Mode
 end)
 
-createSettingsBtn("Target: " .. aimSettings.AimPart, 125, function(btn)
+createSettingsBtn("Target: " .. aimSettings.AimPart, 85, function(btn)
 	if aimSettings.AimPart == "Head" then
 		aimSettings.AimPart = "HumanoidRootPart"
 		btn.Text = "Target: Torso"
@@ -201,14 +213,14 @@ local smoothModes = {
 }
 local smoothIndex = 1
 
-createSettingsBtn("Speed: " .. smoothModes[smoothIndex].name, 165, function(btn)
+createSettingsBtn("Speed: " .. smoothModes[smoothIndex].name, 125, function(btn)
 	smoothIndex = smoothIndex + 1
 	if smoothIndex > #smoothModes then smoothIndex = 1 end
 	aimSettings.Smoothness = smoothModes[smoothIndex].value
 	btn.Text = "Speed: " .. smoothModes[smoothIndex].name
 end)
 
-createSettingsBtn("Team Check: OFF", 205, function(btn)
+createSettingsBtn("Team Check: OFF", 165, function(btn)
 	aimSettings.TeamCheck = not aimSettings.TeamCheck
 	if aimSettings.TeamCheck then
 		btn.Text = "Team Check: ON (Ignore Own)"
@@ -219,7 +231,7 @@ createSettingsBtn("Team Check: OFF", 205, function(btn)
 	end
 end)
 
-createSettingsBtn("Target Team: All", 245, function(btn)
+createSettingsBtn("Target Team: All", 205, function(btn)
 	local availableTeams = {"All"}
 	local foundTeams = {}
 	
@@ -261,7 +273,7 @@ createSettingsBtn("Target Team: All", 245, function(btn)
 	end
 end)
 
-local wallCheckBtn = createSettingsBtn("Wall Check: ON", 285, function(btn)
+local wallCheckBtn = createSettingsBtn("Wall Check: ON", 245, function(btn)
 	aimSettings.WallCheck = not aimSettings.WallCheck
 	if aimSettings.WallCheck then
 		btn.Text = "Wall Check: ON"
@@ -273,7 +285,7 @@ local wallCheckBtn = createSettingsBtn("Wall Check: ON", 285, function(btn)
 end)
 wallCheckBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
 
-createSettingsBtn("Show FOV: OFF", 325, function(btn)
+createSettingsBtn("Show FOV: OFF", 285, function(btn)
 	aimSettings.ShowFOV = not aimSettings.ShowFOV
 	if aimSettings.ShowFOV then
 		btn.Text = "Show FOV: ON"
@@ -286,9 +298,9 @@ end)
 
 local fovFrame = Instance.new("Frame")
 fovFrame.Size = UDim2.new(1, -20, 0, 35)
-fovFrame.Position = UDim2.new(0, 10, 0, 365)
+fovFrame.Position = UDim2.new(0, 10, 0, 325)
 fovFrame.BackgroundTransparency = 1
-fovFrame.Parent = aimMenu
+fovFrame.Parent = aimScroll
 
 local fovLabel = Instance.new("TextLabel")
 fovLabel.Size = UDim2.new(0.6, 0, 1, 0)
@@ -325,7 +337,7 @@ fovInput.FocusLost:Connect(function()
 end)
 
 -- НОВАЯ КНОПКА: Игнор FF (ForceField)
-local ignoreFFBtn = createSettingsBtn("Ignore FF: ON", 405, function(btn)
+local ignoreFFBtn = createSettingsBtn("Ignore FF: ON", 365, function(btn)
 	aimSettings.IgnoreFF = not aimSettings.IgnoreFF
 	if aimSettings.IgnoreFF then
 		btn.Text = "Ignore FF: ON"
@@ -338,7 +350,7 @@ end)
 ignoreFFBtn.TextColor3 = Color3.fromRGB(150, 255, 150)
 
 -- НОВАЯ КНОПКА: Авто-зажатие ЛКМ
-local autoShootBtn = createSettingsBtn("Auto-Shoot: OFF", 445, function(btn)
+local autoShootBtn = createSettingsBtn("Auto-Shoot: OFF", 405, function(btn)
 	aimSettings.AutoShoot = not aimSettings.AutoShoot
 	if aimSettings.AutoShoot then
 		btn.Text = "Auto-Shoot: ON"
