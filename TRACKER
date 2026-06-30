@@ -207,9 +207,6 @@ local function toggleTracker(state)
 		trkBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
 		trkBtn:SetAttribute("OriginalColor", Color3.fromRGB(35, 50, 35))
 		
-		local rayParams = RaycastParams.new()
-		rayParams.FilterType = Enum.RaycastFilterType.Exclude
-		
 		trkConnection = tRunSvc.RenderStepped:Connect(function()
 			-- Обновляем позицию начала лазера (чуть ниже камеры, чтобы не перекрывать прицел)
 			originPart.CFrame = workspace.CurrentCamera.CFrame * CFrame.new(0, -0.8, 0)
@@ -242,11 +239,19 @@ local function toggleTracker(state)
 								local threshold = math.cos(math.rad(trkSet.FovAngle))
 								
 								if dotProduct >= threshold then
-									-- Проверка видимости прямой линии (стены)
-									rayParams.FilterAncestorsInstances = {myChar, pChar}
-									local raycastResult = workspace:Raycast(pChar.Head.Position, myHead.Position - pChar.Head.Position, rayParams)
+									-- Проверка на препятствия (Raycast)
+									local rayOrigin = pChar.Head.Position
+									local rayDirection = myHead.Position - rayOrigin
 									
-									if not raycastResult then
+									local rayParams = RaycastParams.new()
+									rayParams.FilterType = Enum.RaycastFilterType.Exclude
+									-- Игнорируем модель врага и нашу модель, чтобы лучи не блокировались телом/шляпами
+									rayParams.FilterDescendantsInstances = {myChar, pChar}
+									
+									local rayResult = workspace:Raycast(rayOrigin, rayDirection, rayParams)
+									
+									-- Если луч ничего не встретил на пути до нашей головы (нет стен)
+									if not rayResult then
 										isLooking = true
 										table.insert(lookers, p.DisplayName)
 									end
