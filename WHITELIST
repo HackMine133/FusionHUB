@@ -1,0 +1,271 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+
+-- Ожидание загрузки основного интерфейса
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+if not _G.FusionHub or not _G.FusionHub.CreateAddonSettings then
+	warn("API FusionHub не найдено! Обновите главное ядро хаба.")
+	return
+end
+
+-- ==========================================
+-- 1. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ ВАЙТЛИСТА
+-- ==========================================
+_G.FusionHubWhitelistEnabled = false
+_G.FusionHubWhitelist = _G.FusionHubWhitelist or {} -- Храним тут Username игроков
+
+-- ==========================================
+-- 2. СОЗДАНИЕ КОНТЕЙНЕРА ДЛЯ КНОПОК
+-- ==========================================
+local wlRow = Instance.new("Frame")
+wlRow.Name = "WhitelistRow"
+wlRow.Size = UDim2.new(1, -15, 0, 45)
+wlRow.BackgroundTransparency = 1
+wlRow.LayoutOrder = 1 -- Ставим повыше в списке
+wlRow.Parent = scrollFrame
+
+-- ==========================================
+-- 3. ОСНОВНАЯ КНОПКА WHITELIST
+-- ==========================================
+local wlBtn = Instance.new("TextButton")
+wlBtn.Name = "WhitelistToggleButton"
+wlBtn.Size = UDim2.new(1, -55, 1, 0)
+wlBtn.Position = UDim2.new(0, 0, 0, 0)
+wlBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+wlBtn.BackgroundTransparency = 0.4
+wlBtn.Text = ""
+wlBtn.AutoButtonColor = true
+wlBtn.Active = true
+wlBtn.Parent = wlRow
+
+local wlCorner = Instance.new("UICorner")
+wlCorner.CornerRadius = UDim.new(0, 8)
+wlCorner.Parent = wlBtn
+
+local wlLabel = Instance.new("TextLabel")
+wlLabel.Size = UDim2.new(1, -20, 1, 0)
+wlLabel.Position = UDim2.new(0, 10, 0, 0)
+wlLabel.BackgroundTransparency = 1
+wlLabel.Text = "Whitelist: OFF"
+wlLabel.Font = Enum.Font.GothamMedium
+wlLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+wlLabel.TextSize = 14
+wlLabel.TextXAlignment = Enum.TextXAlignment.Left
+wlLabel.Parent = wlBtn
+
+-- ==========================================
+-- 4. КНОПКА НАСТРОЕК (ШЕСТЕРЕНКА)
+-- ==========================================
+local settingsBtn = Instance.new("ImageButton")
+settingsBtn.Name = "WhitelistSettingsButton"
+settingsBtn.Size = UDim2.new(0, 45, 0, 45)
+settingsBtn.Position = UDim2.new(1, -45, 0, 0)
+settingsBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+settingsBtn.BackgroundTransparency = 0.4
+settingsBtn.AutoButtonColor = true
+settingsBtn.Active = true
+settingsBtn.Parent = wlRow
+
+local settingsCorner = Instance.new("UICorner")
+settingsCorner.CornerRadius = UDim.new(0, 8)
+settingsCorner.Parent = settingsBtn
+
+local settingsIcon = Instance.new("ImageLabel")
+settingsIcon.Size = UDim2.new(0.6, 0, 0.6, 0)
+settingsIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+settingsIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+settingsIcon.BackgroundTransparency = 1
+settingsIcon.Image = "rbxassetid://9405931578"
+settingsIcon.Parent = settingsBtn
+
+-- ==========================================
+-- 5. МЕНЮ НАСТРОЕК ВАЙТЛИСТА
+-- ==========================================
+local settingsAPI = _G.FusionHub.CreateAddonSettings("Whitelist Config", 300, 480)
+local wlMenu = settingsAPI.Window
+
+-- Поле ввода для ручного добавления
+local manualInputFrame = Instance.new("Frame")
+manualInputFrame.Size = UDim2.new(1, -20, 0, 35)
+manualInputFrame.Position = UDim2.new(0, 10, 0, 45)
+manualInputFrame.BackgroundTransparency = 1
+manualInputFrame.Parent = wlMenu
+
+local nameInput = Instance.new("TextBox")
+nameInput.Size = UDim2.new(0.7, -5, 1, 0)
+nameInput.Position = UDim2.new(0, 0, 0, 0)
+nameInput.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+nameInput.PlaceholderText = "Enter Username..."
+nameInput.Text = ""
+nameInput.Font = Enum.Font.GothamMedium
+nameInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+nameInput.TextSize = 13
+nameInput.Parent = manualInputFrame
+Instance.new("UICorner", nameInput).CornerRadius = UDim.new(0, 6)
+
+local addBtn = Instance.new("TextButton")
+addBtn.Size = UDim2.new(0.3, 0, 1, 0)
+addBtn.Position = UDim2.new(0.7, 5, 0, 0)
+addBtn.BackgroundColor3 = Color3.fromRGB(45, 120, 45)
+addBtn.Text = "Add"
+addBtn.Font = Enum.Font.GothamBold
+addBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+addBtn.TextSize = 13
+addBtn.Parent = manualInputFrame
+Instance.new("UICorner", addBtn).CornerRadius = UDim.new(0, 6)
+
+-- Заголовок: Игроки на сервере
+local serverLabel = Instance.new("TextLabel")
+serverLabel.Size = UDim2.new(1, -20, 0, 20)
+serverLabel.Position = UDim2.new(0, 10, 0, 90)
+serverLabel.BackgroundTransparency = 1
+serverLabel.Text = "Players in Server (Click to Add):"
+serverLabel.Font = Enum.Font.GothamMedium
+serverLabel.TextColor3 = Color3.fromRGB(180, 180, 185)
+serverLabel.TextSize = 12
+serverLabel.TextXAlignment = Enum.TextXAlignment.Left
+serverLabel.Parent = wlMenu
+
+-- Скролл: Игроки на сервере
+local serverScroll = Instance.new("ScrollingFrame")
+serverScroll.Size = UDim2.new(1, -20, 0, 150)
+serverScroll.Position = UDim2.new(0, 10, 0, 115)
+serverScroll.BackgroundTransparency = 1
+serverScroll.BorderSizePixel = 0
+serverScroll.ScrollBarThickness = 4
+serverScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+serverScroll.Parent = wlMenu
+
+local serverLayout = Instance.new("UIListLayout")
+serverLayout.Padding = UDim.new(0, 5)
+serverLayout.Parent = serverScroll
+
+-- Заголовок: Сохраненный Вайтлист
+local wlListLabel = Instance.new("TextLabel")
+wlListLabel.Size = UDim2.new(1, -20, 0, 20)
+wlListLabel.Position = UDim2.new(0, 10, 0, 275)
+wlListLabel.BackgroundTransparency = 1
+wlListLabel.Text = "Whitelisted (Click to Remove):"
+wlListLabel.Font = Enum.Font.GothamMedium
+wlListLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+wlListLabel.TextSize = 12
+wlListLabel.TextXAlignment = Enum.TextXAlignment.Left
+wlListLabel.Parent = wlMenu
+
+-- Скролл: Сохраненный Вайтлист
+local wlScroll = Instance.new("ScrollingFrame")
+wlScroll.Size = UDim2.new(1, -20, 0, 150)
+wlScroll.Position = UDim2.new(0, 10, 0, 300)
+wlScroll.BackgroundTransparency = 1
+wlScroll.BorderSizePixel = 0
+wlScroll.ScrollBarThickness = 4
+wlScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+wlScroll.Parent = wlMenu
+
+local wlLayout = Instance.new("UIListLayout")
+wlLayout.Padding = UDim.new(0, 5)
+wlLayout.Parent = wlScroll
+
+-- ==========================================
+-- 6. ЛОГИКА ОБНОВЛЕНИЯ СПИСКОВ
+-- ==========================================
+local function isWhitelisted(username)
+	for _, v in ipairs(_G.FusionHubWhitelist) do
+		if v == username then return true end
+	end
+	return false
+end
+
+local function refreshWhitelistUI()
+	-- Очищаем списки
+	for _, child in pairs(serverScroll:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
+	for _, child in pairs(wlScroll:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
+	
+	-- Заполняем игроков сервера
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and not isWhitelisted(p.Name) then
+			local btn = Instance.new("TextButton")
+			btn.Size = UDim2.new(1, -10, 0, 30)
+			btn.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+			btn.Text = p.DisplayName .. " (@" .. p.Name .. ")"
+			btn.Font = Enum.Font.Gotham
+			btn.TextColor3 = Color3.fromRGB(200, 200, 205)
+			btn.TextSize = 12
+			btn.Parent = serverScroll
+			Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+			
+			btn.Activated:Connect(function()
+				table.insert(_G.FusionHubWhitelist, p.Name)
+				refreshWhitelistUI()
+			end)
+		end
+	end
+	
+	-- Заполняем вайтлист
+	for i, wlName in ipairs(_G.FusionHubWhitelist) do
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, -10, 0, 30)
+		btn.BackgroundColor3 = Color3.fromRGB(45, 60, 45) -- Зеленоватый фон
+		btn.Text = wlName .. " (Remove)"
+		btn.Font = Enum.Font.GothamBold
+		btn.TextColor3 = Color3.fromRGB(255, 180, 180) -- Красный текст для удаления
+		btn.TextSize = 12
+		btn.Parent = wlScroll
+		Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+		
+		btn.Activated:Connect(function()
+			table.remove(_G.FusionHubWhitelist, i)
+			refreshWhitelistUI()
+		end)
+	end
+end
+
+-- Ручное добавление по нику
+addBtn.Activated:Connect(function()
+	local text = nameInput.Text
+	if text ~= "" and text ~= player.Name and not isWhitelisted(text) then
+		table.insert(_G.FusionHubWhitelist, text)
+		nameInput.Text = ""
+		refreshWhitelistUI()
+	end
+end)
+
+-- Обновляем списки при открытии меню и изменении игроков
+settingsBtn.Activated:Connect(function()
+	if not wlMenu.Visible then refreshWhitelistUI() end
+	settingsAPI.ToggleFunction()
+end)
+
+Players.PlayerAdded:Connect(function() if wlMenu.Visible then refreshWhitelistUI() end end)
+Players.PlayerRemoving:Connect(function() if wlMenu.Visible then refreshWhitelistUI() end end)
+
+-- ==========================================
+-- 7. ПЕРЕКЛЮЧЕНИЕ СТАТУСА (ON/OFF)
+-- ==========================================
+wlBtn.Activated:Connect(function()
+	_G.FusionHubWhitelistEnabled = not _G.FusionHubWhitelistEnabled
+	
+	if _G.FusionHubWhitelistEnabled then
+		wlLabel.Text = "Whitelist: ON"
+		wlLabel.TextColor3 = Color3.fromRGB(150, 255, 150)
+		wlBtn.BackgroundColor3 = Color3.fromRGB(35, 50, 35)
+	else
+		wlLabel.Text = "Whitelist: OFF"
+		wlLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		wlBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+	end
+end)
