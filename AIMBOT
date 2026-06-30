@@ -349,8 +349,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		return
 	end
 	
-	if gameProcessed or not aimSettings.Enabled then return end
+	if not aimSettings.Enabled then return end
 	
+	-- УБРАНА проверка gameProcessed для бинда, чтобы игра не перебивала ПКМ
 	if handleInputMatch(input) then
 		if aimSettings.Mode == "Toggle" then
 			isAiming = not isAiming
@@ -361,7 +362,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 UserInputService.InputEnded:Connect(function(input, gameProcessed)
-	if gameProcessed or waitBind or not aimSettings.Enabled then return end
+	if waitBind or not aimSettings.Enabled then return end
 	
 	if aimSettings.Mode == "Hold" and handleInputMatch(input) then
 		isAiming = false
@@ -387,7 +388,6 @@ local function isVisible(targetPart, targetChar, currentCamera)
 
 	local rayResult = Workspace:Raycast(rayOrigin, rayDirection, rayParams)
 	
-	-- ОБНОВЛЕНО: Проверяем принадлежность ко всему персонажу (targetChar), а не только к Parent
 	if rayResult then
 		if rayResult.Instance:IsDescendantOf(targetChar) then
 			return true
@@ -406,7 +406,6 @@ local function getTargetPart(char)
 		part = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso") or char.PrimaryPart
 	end
 	
-	-- ОБНОВЛЕНО: Если стандартные части не найдены (игра их прячет), цепляемся за любую базовую часть
 	return part or char:FindFirstChildWhichIsA("BasePart")
 end
 
@@ -424,7 +423,6 @@ local function getClosestPlayer()
 			if aimSettings.TargetTeam ~= "All" and (not v.Team or v.Team.Name ~= aimSettings.TargetTeam) then continue end
 			
 			local char = v.Character
-			-- ОБНОВЛЕНО: Гибкая проверка здоровья, не ломается при отсутствии Humanoid
 			if char then
 				local humanoid = char:FindFirstChildWhichIsA("Humanoid")
 				local isAlive = true
@@ -438,7 +436,6 @@ local function getClosestPlayer()
 					if targetPart then
 						local vector, onScreen = currentCamera:WorldToViewportPoint(targetPart.Position)
 						
-						-- Передаем targetChar для правильной работы WallCheck
 						if onScreen and isVisible(targetPart, char, currentCamera) then
 							local distance = (Vector2.new(mouseLocation.X, mouseLocation.Y) - Vector2.new(vector.X, vector.Y)).Magnitude
 							
@@ -469,16 +466,22 @@ aimBtn.Activated:Connect(function()
 		
 		RunService:BindToRenderStep("FusionHubAimbotPriority", Enum.RenderPriority.Camera.Value + 200, function()
 			if isAiming then
-				local targetChar = getClosestPlayer()
-				local currentCamera = Workspace.CurrentCamera 
-				
-				if targetChar and currentCamera then
-					local targetPart = getTargetPart(targetChar)
-					if targetPart then
-						local targetCFrame = CFrame.new(currentCamera.CFrame.Position, targetPart.Position)
-						currentCamera.CFrame = currentCamera.CFrame:Lerp(targetCFrame, aimSettings.Smoothness)
+				-- Оборачиваем в pcall для защиты от непредвиденных математических ошибок
+				pcall(function()
+					local targetChar = getClosestPlayer()
+					local currentCamera = Workspace.CurrentCamera 
+					
+					if targetChar and currentCamera then
+						local targetPart = getTargetPart(targetChar)
+						if targetPart then
+							-- Защита от NaN ошибки, если камера в точности пересекается с объектом
+							if (currentCamera.CFrame.Position - targetPart.Position).Magnitude > 0.1 then
+								local targetCFrame = CFrame.new(currentCamera.CFrame.Position, targetPart.Position)
+								currentCamera.CFrame = currentCamera.CFrame:Lerp(targetCFrame, aimSettings.Smoothness)
+							end
+						end
 					end
-				end
+				end)
 			end
 		end)
 	else
