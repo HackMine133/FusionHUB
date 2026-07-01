@@ -1,0 +1,77 @@
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- ==========================================
+-- 1. ОЖИДАНИЕ ОСНОВНОГО ИНТЕРФЕЙСА
+-- ==========================================
+-- Скрипт ждет загрузки FusionHubGui и его основных элементов.
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = playerGui:WaitForChild("FusionHubGui", 10)
+
+if not screenGui then
+	warn("FusionHub не найден! Сначала запусти основной скрипт.")
+	return
+end
+
+local menuGroup = screenGui:WaitForChild("MainMenu")
+local scrollFrame = menuGroup:WaitForChild("ContentScroll")
+
+-- ==========================================
+-- 2. СОЗДАНИЕ КНОПКИ FORCE RESET
+-- ==========================================
+local resetBtn = Instance.new("TextButton")
+resetBtn.Name = "ForceResetButton"
+resetBtn.Size = UDim2.new(1, -15, 0, 45)
+resetBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 35) -- Оригинальный цвет фона кнопок 
+resetBtn.BackgroundTransparency = 0.4
+resetBtn.Text = ""
+resetBtn.AutoButtonColor = true
+resetBtn.LayoutOrder = 6 -- Встает после NoClip (у которого LayoutOrder = 5) 
+resetBtn.Parent = scrollFrame
+
+local resetCorner = Instance.new("UICorner")
+resetCorner.CornerRadius = UDim.new(0, 8) -- Стандартное скругление кнопок хаба 
+resetCorner.Parent = resetBtn
+
+local resetLabel = Instance.new("TextLabel")
+resetLabel.Size = UDim2.new(1, -20, 1, 0)
+resetLabel.Position = UDim2.new(0, 10, 0, 0)
+resetLabel.BackgroundTransparency = 1
+resetLabel.Text = "Force Reset Character"
+resetLabel.Font = Enum.Font.GothamMedium
+resetLabel.TextColor3 = Color3.fromRGB(240, 240, 245) -- Стандартный цвет текста [cite: 33]
+resetLabel.TextSize = 14
+resetLabel.TextXAlignment = Enum.TextXAlignment.Left
+resetLabel.Parent = resetBtn
+
+-- ==========================================
+-- 3. ЛОГИКА ПРИНУДИТЕЛЬНОГО РЕСЕТА
+-- ==========================================
+local function forceReset()
+	local character = player.Character
+	if character then
+		-- Метод 1: Обнуление здоровья
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.Health = 0
+		end
+		
+		-- Метод 2: Расчленение (игнорирует заморозку здоровья в некоторых играх)
+		character:BreakJoints()
+	end
+end
+
+-- Обработка нажатия на кнопку
+resetBtn.MouseButton1Click:Connect(function()
+	-- Цветовая индикация нажатия (красный цвет Theme.ButtonDangerBg)
+	resetLabel.TextColor3 = Color3.fromRGB(180, 45, 45) 
+	
+	forceReset()
+	
+	-- Возвращаем цвет текста обратно через небольшую задержку
+	task.delay(0.3, function()
+		if resetLabel then
+			resetLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+		end
+	end)
+end)
