@@ -15,3 +15,4 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB
 loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/AURA"))()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/TRACKER"))()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/WHITELIST"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/HackMine133/FusionHUB/refs/heads/main/RESET"))()
